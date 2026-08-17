@@ -288,22 +288,28 @@ def run_lstm(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
     train_ds = TensorDataset(Xtr_t, ytr_t)
     train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
 
-    for epoch in range(30):
-        model.train()
-        for xb, yb in train_dl:
-            optimizer.zero_grad()
-            pred = model(xb)
-            loss = weighted_bce(pred, yb)
-            loss.backward()
-            optimizer.step()
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+    with Progress(SpinnerColumn(), TextColumn("[cyan]LSTM[/] {task.description}"),
+                  BarColumn(20), TextColumn("{task.fields[val_loss]:.4f}"), TimeElapsedColumn(),
+                  console=console, transient=True) as progress:
+        task = progress.add_task("training", total=30, val_loss=float("inf"))
+        for epoch in range(30):
+            model.train()
+            for xb, yb in train_dl:
+                optimizer.zero_grad()
+                pred = model(xb)
+                loss = weighted_bce(pred, yb)
+                loss.backward()
+                optimizer.step()
 
-        model.eval()
-        with torch.no_grad():
-            val_pred = model(Xva_t)
-            val_loss = weighted_bce(val_pred, yva_t).item()
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            model.eval()
+            with torch.no_grad():
+                val_pred = model(Xva_t)
+                val_loss = weighted_bce(val_pred, yva_t).item()
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            progress.update(task, advance=1, val_loss=val_loss)
 
     if best_state:
         model.load_state_dict(best_state)
@@ -394,22 +400,28 @@ def run_tcn(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
     train_ds = TensorDataset(Xtr_t, ytr_t)
     train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
 
-    for epoch in range(30):
-        model.train()
-        for xb, yb in train_dl:
-            optimizer.zero_grad()
-            pred = model(xb)
-            loss = weighted_bce(pred, yb)
-            loss.backward()
-            optimizer.step()
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+    with Progress(SpinnerColumn(), TextColumn("[cyan]TCN[/] {task.description}"),
+                  BarColumn(20), TextColumn("{task.fields[val_loss]:.4f}"), TimeElapsedColumn(),
+                  console=console, transient=True) as progress:
+        task = progress.add_task("training", total=30, val_loss=float("inf"))
+        for epoch in range(30):
+            model.train()
+            for xb, yb in train_dl:
+                optimizer.zero_grad()
+                pred = model(xb)
+                loss = weighted_bce(pred, yb)
+                loss.backward()
+                optimizer.step()
 
-        model.eval()
-        with torch.no_grad():
-            val_pred = model(Xva_t)
-            val_loss = weighted_bce(val_pred, yva_t).item()
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            model.eval()
+            with torch.no_grad():
+                val_pred = model(Xva_t)
+                val_loss = weighted_bce(val_pred, yva_t).item()
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            progress.update(task, advance=1, val_loss=val_loss)
 
     if best_state:
         model.load_state_dict(best_state)
@@ -504,22 +516,28 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
     train_ds = TensorDataset(Xtr_t, ytr_t)
     train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
 
-    for epoch in range(30):
-        model.train()
-        for xb, yb in train_dl:
-            optimizer.zero_grad()
-            pred = model(xb)
-            loss = weighted_bce(pred, yb)
-            loss.backward()
-            optimizer.step()
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+    with Progress(SpinnerColumn(), TextColumn("[cyan]Transformer[/] {task.description}"),
+                  BarColumn(20), TextColumn("{task.fields[val_loss]:.4f}"), TimeElapsedColumn(),
+                  console=console, transient=True) as progress:
+        task = progress.add_task("training", total=30, val_loss=float("inf"))
+        for epoch in range(30):
+            model.train()
+            for xb, yb in train_dl:
+                optimizer.zero_grad()
+                pred = model(xb)
+                loss = weighted_bce(pred, yb)
+                loss.backward()
+                optimizer.step()
 
-        model.eval()
-        with torch.no_grad():
-            val_pred = model(Xva_t)
-            val_loss = weighted_bce(val_pred, yva_t).item()
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            model.eval()
+            with torch.no_grad():
+                val_pred = model(Xva_t)
+                val_loss = weighted_bce(val_pred, yva_t).item()
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            progress.update(task, advance=1, val_loss=val_loss)
 
     if best_state:
         model.load_state_dict(best_state)
