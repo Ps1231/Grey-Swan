@@ -58,9 +58,9 @@ def fetch(url: str, timeout: int = 60) -> bytes:
     return resp.read()
 
 
-def fetch_json(url: str, timeout: int = 60) -> dict:
+def fetch_json(url: str, timeout: int = 60, retries: int = 1) -> dict:
     """Fetch and parse JSON."""
-    return json.loads(fetch(url, timeout).decode("utf-8"))
+    return json.loads(fetch_with_retry(url, timeout, retries).decode("utf-8"))
 
 
 def human_size(n: int) -> str:
@@ -104,6 +104,29 @@ def save_json(path: Path, data):
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def skip_if_exists(out: Path, source: str, label: str) -> bool:
+    """Return True if file already exists (skip download). Print and record it."""
+    if out.exists() and out.stat().st_size > 0:
+        record(source, label, out, 0.0, True)
+        console.print(f"  [dim]⊘[/] {label:30s} → exists, {human_size(out.stat().st_size)} (skipped)")
+        return True
+    return False
+
+
+def fetch_with_retry(url: str, timeout: int = 60, retries: int = 3, backoff: float = 2.0) -> bytes:
+    """Fetch URL with retry + exponential backoff for rate limits."""
+    for attempt in range(retries):
+        try:
+            return fetch(url, timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < retries - 1:
+                wait = backoff * (attempt + 1)
+                console.print(f"    [yellow]rate limited, waiting {wait:.0f}s...[/]")
+                time.sleep(wait)
+            else:
+                raise
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # 1. YAHOO FINANCE (via yfinance)
 # ══════════════════════════════════════════════════════════════════════════
@@ -133,6 +156,8 @@ def download_yahoo():
             status.update(f"[bold cyan]Downloading {name} ({ticker})...")
             out = DATA_DIR / "yahoo" / f"{name}.csv"
             out.parent.mkdir(parents=True, exist_ok=True)
+            if skip_if_exists(out, source, f"{name}.csv"):
+                continue
             t0 = time.time()
             try:
                 t = yf.Ticker(ticker)
@@ -164,6 +189,9 @@ def download_french():
     source = "Kenneth French"
     for name, fname in FRENCH_FILES.items():
         out = DATA_DIR / "french" / f"french_{name}.csv"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if skip_if_exists(out, source, f"french_{name}.csv"):
+            continue
         t0 = time.time()
         try:
             data = fetch(FRENCH_BASE + fname, timeout=60)
@@ -191,6 +219,11 @@ TREASURY_YEARS = list(range(2000, 2027))
 def download_treasury():
     """Download Treasury.gov daily yield curve rates for all years."""
     source = "Treasury.gov"
+    out = DATA_DIR / "treasury" / "treasury_yield_curve_full.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if skip_if_exists(out, source, "treasury_yield_curve_full.csv"):
+        return
+
     all_rows = []
 
     with console.status("[bold cyan]Downloading Treasury.gov yield curve...") as status:
@@ -215,7 +248,6 @@ def download_treasury():
                 console.print(f"    [red]✗ {year}: {e}[/]")
 
     if all_rows:
-        out = DATA_DIR / "treasury" / "treasury_yield_curve_full.csv"
         t0 = time.time()
         save_text(out, "\n".join(all_rows) + "\n")
         elapsed = time.time() - t0
@@ -248,6 +280,9 @@ def download_bls():
     t0 = time.time()
     for name, sid in BLS_SERIES.items():
         out = DATA_DIR / "bls" / f"bls_{name}.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if skip_if_exists(out, source, f"bls_{name}.json"):
+            continue
         try:
             all_data = []
             for start, end in periods:
@@ -288,43 +323,48 @@ def download_coingecko():
     """Download CoinGecko market data, global stats, and OHLC."""
     source = "CoinGecko"
     out_dir = DATA_DIR / "coingecko"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # Markets endpoint
-    t0 = time.time()
-    try:
-        url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false"
-        data = fetch_json(url)
-        out = out_dir / "coingecko_markets.json"
-        save_json(out, data)
-        elapsed = time.time() - t0
-        record(source, "coingecko_markets.json", out, elapsed, True)
-        console.print(f"  [green]✓[/] markets (top 100) → {len(data)} coins, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-    except Exception as e:
-        elapsed = time.time() - t0
-        record(source, "coingecko_markets.json", out, elapsed, False, str(e))
-        console.print(f"  [red]✗[/] markets → {e}")
+    out = out_dir / "coingecko_markets.json"
+    if not skip_if_exists(out, source, "coingecko_markets.json"):
+        t0 = time.time()
+        try:
+            url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false"
+            data = fetch_json(url, retries=3)
+            save_json(out, data)
+            elapsed = time.time() - t0
+            record(source, "coingecko_markets.json", out, elapsed, True)
+            console.print(f"  [green]✓[/] markets (top 100) → {len(data)} coins, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, "coingecko_markets.json", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] markets → {e}")
 
     # Global endpoint
-    t0 = time.time()
-    try:
-        data = fetch_json("https://api.coingecko.com/api/v3/global")
-        out = out_dir / "coingecko_global.json"
-        save_json(out, data)
-        elapsed = time.time() - t0
-        record(source, "coingecko_global.json", out, elapsed, True)
-        console.print(f"  [green]✓[/] global → {len(data.get('data', {}))} fields, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-    except Exception as e:
-        elapsed = time.time() - t0
-        record(source, "coingecko_global.json", out, elapsed, False, str(e))
-        console.print(f"  [red]✗[/] global → {e}")
+    out = out_dir / "coingecko_global.json"
+    if not skip_if_exists(out, source, "coingecko_global.json"):
+        t0 = time.time()
+        try:
+            data = fetch_json("https://api.coingecko.com/api/v3/global", retries=3)
+            save_json(out, data)
+            elapsed = time.time() - t0
+            record(source, "coingecko_global.json", out, elapsed, True)
+            console.print(f"  [green]✓[/] global → {len(data.get('data', {}))} fields, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, "coingecko_global.json", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] global → {e}")
 
     # OHLC for each coin (365-day)
     for coin in COINGECKO_COINS:
+        out = out_dir / f"coingecko_ohlc_{coin}.json"
+        if skip_if_exists(out, source, f"coingecko_ohlc_{coin}.json"):
+            continue
         t0 = time.time()
         try:
             url = f"https://api.coingecko.com/api/v3/coins/{coin}/ohlc?vs_currency=usd&days=365"
-            data = fetch_json(url)
-            out = out_dir / f"coingecko_ohlc_{coin}.json"
+            data = fetch_json(url, retries=3)
             save_json(out, data)
             elapsed = time.time() - t0
             record(source, f"coingecko_ohlc_{coin}.json", out, elapsed, True)
@@ -342,10 +382,14 @@ def download_coingecko():
 def download_cboe():
     """Download CBOE VIX historical OHLCV."""
     source = "CBOE"
+    out = DATA_DIR / "cboe" / "cboe_vix_historical.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if skip_if_exists(out, source, "cboe_vix_historical.json"):
+        return
+
     t0 = time.time()
     try:
         data = fetch_json("https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_VIX.json")
-        out = DATA_DIR / "cboe" / "cboe_vix_historical.json"
         save_json(out, data)
         elapsed = time.time() - t0
         entries = data.get("data", data) if isinstance(data, dict) else data
@@ -378,6 +422,8 @@ def download_fred():
     for name, ticker in FRED_TICKERS.items():
         out = DATA_DIR / "fred" / f"fred_{name}.csv"
         out.parent.mkdir(parents=True, exist_ok=True)
+        if skip_if_exists(out, source, f"fred_{name}.csv"):
+            continue
         t0 = time.time()
         try:
             t = yf.Ticker(ticker)
@@ -415,6 +461,9 @@ def download_fred_indicators():
     source = "FRED Indicators"
     for name, series_id in FRED_INDICATORS.items():
         out = DATA_DIR / "fred_indicators" / f"fred_{name}.csv"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if skip_if_exists(out, source, f"fred_{name}.csv"):
+            continue
         t0 = time.time()
         try:
             url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -447,80 +496,85 @@ def download_sec():
     """Download SEC EDGAR datasets: company facts, submissions, and form 8-K index."""
     source = "SEC EDGAR"
     out_dir = DATA_DIR / "sec"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Company Facts API (XBRL financial statements for all companies)
-    t0 = time.time()
-    try:
-        url = "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"  # Apple as sample
-        req = urllib.request.Request(url, headers=SEC_HEADERS)
-        resp = urllib.request.urlopen(req, timeout=60, context=CTX)
-        data = json.loads(resp.read().decode())
-        out = out_dir / "sec_companyfacts_aapl.json"
-        save_json(out, data)
-        elapsed = time.time() - t0
-        facts = data.get("facts", {}).get("us-gaap", {})
-        record(source, "sec_companyfacts_aapl.json", out, elapsed, True)
-        console.print(f"  [green]✓[/] companyfacts (AAPL) → {len(facts)} us-gaap concepts, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-    except Exception as e:
-        elapsed = time.time() - t0
-        record(source, "sec_companyfacts_aapl.json", out, elapsed, False, str(e))
-        console.print(f"  [red]✗[/] companyfacts (AAPL) → {e}")
+    out = out_dir / "sec_companyfacts_aapl.json"
+    if not skip_if_exists(out, source, "sec_companyfacts_aapl.json"):
+        t0 = time.time()
+        try:
+            url = "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"
+            req = urllib.request.Request(url, headers=SEC_HEADERS)
+            resp = urllib.request.urlopen(req, timeout=60, context=CTX)
+            data = json.loads(resp.read().decode())
+            save_json(out, data)
+            elapsed = time.time() - t0
+            facts = data.get("facts", {}).get("us-gaap", {})
+            record(source, "sec_companyfacts_aapl.json", out, elapsed, True)
+            console.print(f"  [green]✓[/] companyfacts (AAPL) → {len(facts)} us-gaap concepts, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, "sec_companyfacts_aapl.json", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] companyfacts (AAPL) → {e}")
 
-    # 2. Full-Text Search / Submissions for a sample company
-    t0 = time.time()
-    try:
-        url = "https://data.sec.gov/submissions/CIK0000320193.json"
-        req = urllib.request.Request(url, headers=SEC_HEADERS)
-        resp = urllib.request.urlopen(req, timeout=60, context=CTX)
-        data = json.loads(resp.read().decode())
-        out = out_dir / "sec_submissions_aapl.json"
-        save_json(out, data)
-        elapsed = time.time() - t0
-        recent = data.get("filings", {}).get("recent", {})
-        n_filings = len(recent.get("form", [])) if recent else 0
-        record(source, "sec_submissions_aapl.json", out, elapsed, True)
-        console.print(f"  [green]✓[/] submissions (AAPL) → {n_filings} recent filings, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-    except Exception as e:
-        elapsed = time.time() - t0
-        record(source, "sec_submissions_aapl.json", out, elapsed, False, str(e))
-        console.print(f"  [red]✗[/] submissions (AAPL) → {e}")
+    # 2. Submissions for a sample company
+    out = out_dir / "sec_submissions_aapl.json"
+    if not skip_if_exists(out, source, "sec_submissions_aapl.json"):
+        t0 = time.time()
+        try:
+            url = "https://data.sec.gov/submissions/CIK0000320193.json"
+            req = urllib.request.Request(url, headers=SEC_HEADERS)
+            resp = urllib.request.urlopen(req, timeout=60, context=CTX)
+            data = json.loads(resp.read().decode())
+            save_json(out, data)
+            elapsed = time.time() - t0
+            recent = data.get("filings", {}).get("recent", {})
+            n_filings = len(recent.get("form", [])) if recent else 0
+            record(source, "sec_submissions_aapl.json", out, elapsed, True)
+            console.print(f"  [green]✓[/] submissions (AAPL) → {n_filings} recent filings, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, "sec_submissions_aapl.json", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] submissions (AAPL) → {e}")
 
     # 3. Form 8-K recent filings index
-    t0 = time.time()
-    try:
-        url = "https://efts.sec.gov/LATEST/search-index?q=%228-K%22&dateRange=custom&startdt=2024-01-01&enddt=2026-12-31&forms=8-K&hits.hits.total=true&hits.hits._source=file_date,display_names,entity_name"
-        req = urllib.request.Request(url, headers=SEC_HEADERS)
-        resp = urllib.request.urlopen(req, timeout=60, context=CTX)
-        data = json.loads(resp.read().decode())
-        out = out_dir / "sec_8k_index.json"
-        save_json(out, data)
-        elapsed = time.time() - t0
-        total = data.get("hits", {}).get("total", {}).get("value", 0) if isinstance(data.get("hits", {}).get("total"), dict) else 0
-        record(source, "sec_8k_index.json", out, elapsed, True)
-        console.print(f"  [green]✓[/] 8-K index → {total:,} filings, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-    except Exception as e:
-        elapsed = time.time() - t0
-        record(source, "sec_8k_index.json", out, elapsed, False, str(e))
-        console.print(f"  [red]✗[/] 8-K index → {e}")
+    out = out_dir / "sec_8k_index.json"
+    if not skip_if_exists(out, source, "sec_8k_index.json"):
+        t0 = time.time()
+        try:
+            url = "https://efts.sec.gov/LATEST/search-index?q=%228-K%22&dateRange=custom&startdt=2024-01-01&enddt=2026-12-31&forms=8-K&hits.hits.total=true&hits.hits._source=file_date,display_names,entity_name"
+            req = urllib.request.Request(url, headers=SEC_HEADERS)
+            resp = urllib.request.urlopen(req, timeout=60, context=CTX)
+            data = json.loads(resp.read().decode())
+            save_json(out, data)
+            elapsed = time.time() - t0
+            total = data.get("hits", {}).get("total", {}).get("value", 0) if isinstance(data.get("hits", {}).get("total"), dict) else 0
+            record(source, "sec_8k_index.json", out, elapsed, True)
+            console.print(f"  [green]✓[/] 8-K index → {total:,} filings, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, "sec_8k_index.json", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] 8-K index → {e}")
 
     # 4. Financial Statement Notes datasets (bulk download link info)
-    t0 = time.time()
-    try:
-        url = "https://www.sec.gov/data-research/sec-markets-data/financial-statement-notes-data-sets"
-        req = urllib.request.Request(url, headers={"User-Agent": "Grey-Swan/1.0 (research project; contact@example.com)", "Accept": "text/html"})
-        resp = urllib.request.urlopen(req, timeout=30, context=CTX)
-        html = resp.read().decode("utf-8", errors="replace")
-        import re
-        zip_links = re.findall(r'href="([^"]*\.zip)"', html)
-        out = out_dir / "sec_notes_dataset_links.json"
-        save_json(out, {"download_links": zip_links, "source_url": url, "note": "These are bulk XML zip files for financial statement notes"})
-        elapsed = time.time() - t0
-        record(source, "sec_notes_dataset_links.json", out, elapsed, True)
-        console.print(f"  [green]✓[/] notes dataset links → {len(zip_links)} zip files found, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-    except Exception as e:
-        elapsed = time.time() - t0
-        record(source, "sec_notes_dataset_links.json", out, elapsed, False, str(e))
-        console.print(f"  [red]✗[/] notes dataset links → {e}")
+    out = out_dir / "sec_notes_dataset_links.json"
+    if not skip_if_exists(out, source, "sec_notes_dataset_links.json"):
+        t0 = time.time()
+        try:
+            url = "https://www.sec.gov/data-research/sec-markets-data/financial-statement-notes-data-sets"
+            req = urllib.request.Request(url, headers={"User-Agent": "Grey-Swan/1.0 (research project; contact@example.com)", "Accept": "text/html"})
+            resp = urllib.request.urlopen(req, timeout=30, context=CTX)
+            html = resp.read().decode("utf-8", errors="replace")
+            import re
+            zip_links = re.findall(r'href="([^"]*\.zip)"', html)
+            save_json(out, {"download_links": zip_links, "source_url": url, "note": "These are bulk XML zip files for financial statement notes"})
+            elapsed = time.time() - t0
+            record(source, "sec_notes_dataset_links.json", out, elapsed, True)
+            console.print(f"  [green]✓[/] notes dataset links → {len(zip_links)} zip files found, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, "sec_notes_dataset_links.json", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] notes dataset links → {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -542,6 +596,11 @@ def download_trends():
     except ImportError:
         console.print("  [red]✗[/] pytrends not installed. Run: pip install pytrends")
         record(source, "google_trends.json", Path(""), 0, False, "pytrends not installed")
+        return
+
+    out = DATA_DIR / "trends" / "google_trends_historical.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if skip_if_exists(out, source, "google_trends_historical.json"):
         return
 
     pytrends = TrendReq(hl="en-US", tz=360)
