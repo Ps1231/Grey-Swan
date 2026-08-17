@@ -68,9 +68,9 @@ GRAPH_NODES = [
 # 1. REGIME LABELING
 # ═══════════════════════════════════════════════════════════════════════════
 
-def compute_drawdown(prices: pd.Series) -> pd.Series:
+def compute_drawdown(prices: pd.Series, lookback: int = 756) -> pd.Series:
     """Compute running drawdown from peak."""
-    peak = prices.expanding(min_periods=1).max()
+    peak = prices.rolling(lookback, min_periods=1).max()
     return (prices - peak) / peak
 
 
@@ -184,7 +184,8 @@ def label_regimes(features: pd.DataFrame) -> pd.DataFrame:
 
 def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
                           window: int = 60, step: int = 20,
-                          corr_threshold: float = 0.3) -> list[dict]:
+                          corr_threshold: float = 0.3,
+                          min_valid_nodes: int = 6) -> list[dict]:
     """
     Build time-varying correlation graphs at regular intervals.
 
@@ -196,6 +197,7 @@ def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
 
     Returns list of graph snapshots with metadata.
     """
+
     console.print(f"\n  [cyan]Building dynamic graphs (window={window}, step={step})...[/]")
 
     # Filter to available nodes
@@ -215,6 +217,7 @@ def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
 
     # Build graph snapshots
     snapshots = []
+    skipped_sparse = 0
     dates = returns.index[window::step]
 
     for date in dates:
@@ -225,7 +228,17 @@ def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
         if len(window_data) < window // 2:
             continue
 
-        # Correlation matrix
+        #  keep only assets that actually have data through most of
+        # this window; skip the snapshot entirely if too few remain.
+        valid_nodes = window_data.columns[
+            window_data.notna().sum() >= window // 2
+        ].tolist()
+        if len(valid_nodes) < min_valid_nodes:
+            skipped_sparse += 1
+            continue
+        window_data = window_data[valid_nodes]
+
+        # Correlation matrix (now only over assets with real data)
         corr = window_data.corr()
         corr = corr.fillna(0)
 
@@ -240,13 +253,13 @@ def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
                     edges.append((i, j))
                     edge_weights.append(float(w))
 
-        # Node features: latest returns + 20d volatility
-        node_returns = returns.loc[date].reindex(available).fillna(0).values
-        node_vol = returns.loc[:date].tail(20).std().reindex(available).fillna(0).values
+        # Node features: latest returns + 20d volatility (valid nodes only)
+        node_returns = returns.loc[date].reindex(nodes).fillna(0).values
+        node_vol = returns.loc[:date].tail(20).std().reindex(nodes).fillna(0).values
 
         snapshot = {
             "date": date,
-            "nodes": available,
+            "nodes": nodes,
             "edges": edges,
             "edge_weights": edge_weights,
             "node_returns": node_returns,
@@ -259,7 +272,12 @@ def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
         }
         snapshots.append(snapshot)
 
-    console.print(f"  {len(snapshots)} graph snapshots built")
+    if not snapshots:
+        raise ValueError("No graph snapshots survived the min_valid_nodes filter — "
+                          "lower min_valid_nodes or check your data coverage.")
+
+    console.print(f"  {len(snapshots)} graph snapshots built "
+                  f"({skipped_sparse} skipped for insufficient asset coverage)")
     console.print(f"  Date range: {snapshots[0]['date'].date()} to {snapshots[-1]['date'].date()}")
     avg_edges = np.mean([s["n_edges"] for s in snapshots])
     avg_density = np.mean([s["density"] for s in snapshots])
@@ -432,14 +450,12 @@ def plot_graph_structure(snapshots: list[dict]):
     targets = {}
     for snap in snapshots:
         r = int(snap["regime"])
-        if r == 0 and 0 not in targets:
-            targets[0] = snap
-        elif r == 2 and 2 not in targets:
-            targets[2] = snap
-        elif r == 4 and 4 not in targets:
-            targets[4] = snap
+        if r not in (0, 2, 4) or snap["n_edges"] == 0:
+            continue
+        if r not in targets or snap["density"] > targets[r]["density"]:
+            targets[r] = snap
 
-    # Fallback: use any available
+        # Fallback: use any available
     if len(targets) < 2:
         for snap in snapshots:
             r = int(snap["regime"])
