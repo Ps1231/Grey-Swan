@@ -1,8 +1,0 @@
-date,recession,stock market crash,bankruptcy,inflation,unemployment,isPartial
-2024-01-01,8,1,11,42,58,False
-2024-01-02,10,1,19,56,100,False
-2024-01-03,10,1,21,61,94,False
-2024-01-04,10,2,22,64,85,False
-2024-01-05,10,2,21,59,82,False
-2024-01-06,8,1,13,43,46,False
-2024-01-07,8,1,13,51,87,False
