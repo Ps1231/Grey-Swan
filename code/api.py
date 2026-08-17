@@ -117,6 +117,9 @@ def get_regimes():
     cols = [c for c in cols if c in df.columns]
     sample = df[cols].tail(500).copy()
     sample["date"] = sample["date"].astype(str)
+    for col in sample.columns:
+        if sample[col].dtype in ["float64", "float32"]:
+            sample[col] = sample[col].where(sample[col].notna(), None)
     return sample.to_dict(orient="records")
 
 
@@ -129,7 +132,7 @@ def get_regime_timeline():
     if "date" not in df.columns:
         df = df.rename(columns={df.columns[0]: "date"})
     df["date"] = pd.to_datetime(df["date"])
-    monthly = df.set_index("date").resample("M")["regime"].agg(lambda x: x.mode()[0] if len(x) > 0 else 0)
+    monthly = df.set_index("date").resample("ME")["regime"].agg(lambda x: x.mode()[0] if len(x) > 0 else 0)
     monthly = monthly.reset_index()
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m")
     return {"dates": monthly["date"].tolist(), "regimes": monthly["regime"].tolist()}
