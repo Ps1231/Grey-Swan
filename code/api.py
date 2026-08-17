@@ -117,10 +117,12 @@ def get_regimes():
     cols = [c for c in cols if c in df.columns]
     sample = df[cols].tail(500).copy()
     sample["date"] = sample["date"].astype(str)
-    for col in sample.columns:
-        if sample[col].dtype in ["float64", "float32"]:
-            sample[col] = sample[col].where(sample[col].notna(), None)
-    return sample.to_dict(orient="records")
+    records = sample.to_dict(orient="records")
+    for rec in records:
+        for k, v in rec.items():
+            if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
+                rec[k] = None
+    return records
 
 
 @app.get("/api/regimes/timeline")
