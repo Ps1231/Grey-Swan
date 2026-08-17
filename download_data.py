@@ -467,7 +467,7 @@ def download_fred_indicators():
         t0 = time.time()
         try:
             url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-            raw = fetch(url, timeout=30).decode("utf-8")
+            raw = fetch_with_retry(url, timeout=90, retries=3, backoff=5.0).decode("utf-8")
             lines = raw.strip().split("\n")
             if lines and (lines[0].startswith("DATE") or lines[0].startswith("DATE,")):
                 save_text(out, raw)
