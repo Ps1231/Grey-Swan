@@ -622,7 +622,7 @@ def run_automl(X_train, y_train, X_val, y_val, n_trials=100):
             params = {
                 "n_estimators": trial.suggest_int("n_estimators", 100, 500),
                 "max_depth": trial.suggest_int("max_depth", 5, 20),
-                "min_samples_leaf": trial.suggest_int("min_leaf", 5, 50),
+                "min_samples_leaf": trial.suggest_int("min_samples_leaf", 5, 50),
                 "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", 0.3, 0.5]),
                 "class_weight": "balanced",
                 "random_state": 42, "n_jobs": -1,
