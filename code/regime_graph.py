@@ -203,10 +203,13 @@ def build_dynamic_graphs(features: pd.DataFrame, regime_df: pd.DataFrame,
     console.print(f"  {len(available)} nodes available")
 
     # Compute log returns for graph nodes
-    returns = pd.DataFrame(index=features.index)
-    for col in available:
-        series = features[col].replace(0, np.nan)
-        returns[col] = np.log(series / series.shift(1))
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        returns = pd.DataFrame(index=features.index)
+        for col in available:
+            series = features[col].replace(0, np.nan)
+            returns[col] = np.log(series / series.shift(1))
 
     returns = returns.dropna(how="all")
 
@@ -415,7 +418,6 @@ def plot_correlation_heatmap(snapshots: list[dict], regime_df: pd.DataFrame):
     cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])
     fig.colorbar(im, cax=cbar_ax, label="Correlation")
 
-    plt.tight_layout(rect=[0, 0, 0.86, 1])
     path = VIZ_DIR / "correlation_heatmaps.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
