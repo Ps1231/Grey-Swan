@@ -30,7 +30,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -286,6 +286,21 @@ def get_visualization(name: str):
     if not path.exists():
         return JSONResponse({"error": "Not found"}, status_code=404)
     return FileResponse(path, media_type="image/png")
+
+
+@app.post("/api/query")
+def query_event(body: dict = Body(...)):
+    text = body.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "No text provided"}, status_code=400)
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from text_analyzer import analyze_event
+        result = analyze_event(text)
+        return result
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 def main():

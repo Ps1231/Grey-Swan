@@ -3,6 +3,7 @@ pandas>=2.0
 pyarrow>=14.0
 scikit-learn>=1.4
 torch>=2.1
+transformers>=4.30
 xgboost>=2.0
 lightgbm>=4.0
 optuna>=3.5
