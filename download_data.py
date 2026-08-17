@@ -138,6 +138,9 @@ def download_yahoo():
                 t = yf.Ticker(ticker)
                 df = t.history(period="max")
                 df.to_csv(out)
+                elapsed = time.time() - t0
+                record(source, f"{name}.csv", out, elapsed, True)
+                console.print(f"  [green]✓[/] {name:12s} ({ticker:8s}) → {len(df):,} rows, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
             except Exception as e:
                 elapsed = time.time() - t0
                 record(source, f"{name}.csv", out, elapsed, False, str(e))
