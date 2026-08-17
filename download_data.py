@@ -131,16 +131,13 @@ def download_yahoo():
     with console.status(f"[bold cyan]Downloading Yahoo Finance data...") as status:
         for name, ticker in YAHOO_TICKERS.items():
             status.update(f"[bold cyan]Downloading {name} ({ticker})...")
-                out = DATA_DIR / "yahoo" / f"{name}.csv"
-                out.parent.mkdir(parents=True, exist_ok=True)
-                t0 = time.time()
-                try:
-                    t = yf.Ticker(ticker)
-                    df = t.history(period="max")
-                    df.to_csv(out)
-                elapsed = time.time() - t0
-                record(source, f"{name}.csv", out, elapsed, True)
-                console.print(f"  [green]✓[/] {name:12s} ({ticker:8s}) → {len(df):,} rows, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+            out = DATA_DIR / "yahoo" / f"{name}.csv"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            t0 = time.time()
+            try:
+                t = yf.Ticker(ticker)
+                df = t.history(period="max")
+                df.to_csv(out)
             except Exception as e:
                 elapsed = time.time() - t0
                 record(source, f"{name}.csv", out, elapsed, False, str(e))
