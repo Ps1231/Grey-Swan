@@ -76,42 +76,27 @@ Grey-Swan is a research-grade financial intelligence and risk-monitoring system 
 
 - NSE/BSE equity and index data for emerging-market regime coverage and cross-market contagion analysis.
 
-### 4.6 World Bank Open Data
-
-- Free global macroeconomic indicators: GDP growth, inflation, trade balances, debt-to-GDP across countries. Useful for cross-country contagion and macro-regime features.
-- [World Bank Open Data](https://data.worldbank.org/)
-
-### 4.7 IMF International Financial Statistics
-
-- Global capital flow data, exchange rate regimes, reserve assets, and balance-of-payments series. Supports cross-market stress detection.
-- [IMF Data](https://data.imf.org/)
-
-### 4.8 Bureau of Labor Statistics (BLS)
+### 4.6 Bureau of Labor Statistics (BLS)
 
 - US CPI, unemployment, non-farm payrolls, labor force participation. Macro surprise features for inflation and employment shocks.
 - [BLS Public Data API](https://www.bls.gov/data/)
 
-### 4.9 US Treasury.gov
+### 4.7 US Treasury.gov
 
 - Daily Treasury par yield curve rates, auction data, and federal debt statistics. Direct source for yield curve construction without reliance on third-party wrappers.
 - [Treasury.gov Daily Yield Curve](https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/)
 
-### 4.10 Stooq
+### 4.8 Stooq
 
 - Free historical daily data for global equities, indices, ETFs, commodities, currencies, and bonds. Useful as a redundant/backup source and for non-US market coverage.
 - [Stooq](https://stooq.com/)
 
-### 4.11 Alpha Vantage
-
-- Free API (with rate limits) for stocks, forex, crypto, and technical indicators. Useful for real-time-ish intraday features and crypto market stress signals.
-- [Alpha Vantage](https://www.alphavantage.co/)
-
-### 4.12 CoinGecko API
+### 4.9 CoinGecko API
 
 - Free cryptocurrency market data: BTC dominance, total crypto market cap, DeFi TVL, stablecoin flows. Crypto stress often precedes or coincides with broader market stress.
 - [CoinGecko API](https://www.coingecko.com/en/api)
 
-### 4.13 Google Trends
+### 4.10 Google Trends
 
 - Free proxy for retail investor sentiment, search-driven panic, and attention spikes. Elevated search interest in terms like "recession", "crash", "bankruptcy" correlates with regime transitions.
 - [Google Trends](https://trends.google.com/)
@@ -299,7 +284,7 @@ The system identifies major factors contributing to each warning:
 
 ```
 Multi-Source Financial Data Ingestion
-    (FRED, CBOE, Yahoo Finance, Kenneth French, Indian Markets, World Bank, IMF, BLS, Treasury.gov, Stooq, Alpha Vantage, CoinGecko, Google Trends)
+    (FRED, CBOE, Yahoo Finance, Kenneth French, Indian Markets, BLS, Treasury.gov, Stooq, CoinGecko, Google Trends)
         |
         v
 Cleaning and Versioning Pipeline
