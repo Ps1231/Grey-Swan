@@ -738,19 +738,19 @@ def plot_ablation_chart(results_df, save=True):
     labels = [f"C{c}" for c in configs]
 
     # PR-AUC
-    axes[0].bar(labels, results_df["extreme_5d_prauc"], color="#3498db", alpha=0.8)
+    axes[0].bar(labels, results_df["test_extreme_5d_prauc"], color="#3498db", alpha=0.8)
     axes[0].set_title("Extreme 5d PR-AUC")
     axes[0].set_ylim(0, 1)
     axes[0].grid(True, alpha=0.3, axis="y")
 
     # Regime Accuracy
-    axes[1].bar(labels, results_df["regime_acc"], color="#2ecc71", alpha=0.8)
+    axes[1].bar(labels, results_df["test_regime_acc"], color="#2ecc71", alpha=0.8)
     axes[1].set_title("Regime Accuracy")
     axes[1].set_ylim(0, 1)
     axes[1].grid(True, alpha=0.3, axis="y")
 
     # MaxDD MAE
-    axes[2].bar(labels, results_df["maxdd_5d_mae"], color="#e74c3c", alpha=0.8)
+    axes[2].bar(labels, results_df["test_maxdd_5d_mae"], color="#e74c3c", alpha=0.8)
     axes[2].set_title("Max Drawdown 5d MAE")
     axes[2].grid(True, alpha=0.3, axis="y")
 
