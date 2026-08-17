@@ -204,6 +204,7 @@ class GreySwanDataset(Dataset):
         feat_subset = self.features.loc[self.dates, common_cols].copy()
         feat_subset = feat_subset.fillna(0)
         self.tabular_data = feat_subset.values.astype(np.float32)
+        self.n_tabular = self.tabular_data.shape[1]
 
         # Targets
         regime_col = "regime" if "regime" in self.regime_df.columns else None
@@ -239,7 +240,7 @@ class GreySwanDataset(Dataset):
         if tab_idx >= 0 and tab_idx < len(self.tabular_data):
             tabular = torch.FloatTensor(self.tabular_data[tab_idx])
         else:
-            tabular = torch.zeros(len(self.tabular_cols), dtype=torch.float32)
+            tabular = torch.zeros(self.n_tabular, dtype=torch.float32)
 
         # Targets
         targets = {}
@@ -821,7 +822,7 @@ def run_single_config(config, features, regime_df, graph_idx, epochs=30, lr=1e-3
     val_ds = GreySwanDataset(features, regime_df, graph_idx, SEQ_LEN, "val")
     test_ds = GreySwanDataset(features, regime_df, graph_idx, SEQ_LEN, "test")
 
-    n_tabular = train_ds.tabular_data.shape[1]
+    n_tabular = train_ds.n_tabular
     console.print(f"  Tabular features: {n_tabular}")
 
     train_dl = DataLoader(train_ds, batch_size=64, shuffle=True, collate_fn=collate_fn, num_workers=0)
