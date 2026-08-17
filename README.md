@@ -72,38 +72,90 @@ Grey-Swan is a research-grade financial intelligence and risk-monitoring system 
 - **Foreign Exchange:** [EUR/USD (EURUSD=X)](https://finance.yahoo.com/quote/EURUSD%3DX/history/), [USD/JPY (JPY=X)](https://finance.yahoo.com/quote/JPY%3DX/history/)
 - **Equities:** [Apple (AAPL)](https://finance.yahoo.com/quote/AAPL/history/), [Microsoft (MSFT)](https://finance.yahoo.com/quote/MSFT/history/), [NVIDIA (NVDA)](https://finance.yahoo.com/quote/NVDA/history/)
 
-### 4.5 Indian Market Sources
-
-- NSE/BSE equity and index data for emerging-market regime coverage and cross-market contagion analysis.
-
-### 4.6 Bureau of Labor Statistics (BLS)
+### 4.5 Bureau of Labor Statistics (BLS)
 
 - US CPI, unemployment, non-farm payrolls, labor force participation. Macro surprise features for inflation and employment shocks.
 - [BLS Public Data API](https://www.bls.gov/data/)
 
-### 4.7 US Treasury.gov
+### 4.6 US Treasury.gov
 
 - Daily Treasury par yield curve rates, auction data, and federal debt statistics. Direct source for yield curve construction without reliance on third-party wrappers.
 - [Treasury.gov Daily Yield Curve](https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/)
 
-### 4.8 Stooq
-
-- Free historical daily data for global equities, indices, ETFs, commodities, currencies, and bonds. Useful as a redundant/backup source and for non-US market coverage.
-- [Stooq](https://stooq.com/)
-
-### 4.9 CoinGecko API
+### 4.7 CoinGecko API
 
 - Free cryptocurrency market data: BTC dominance, total crypto market cap, DeFi TVL, stablecoin flows. Crypto stress often precedes or coincides with broader market stress.
 - [CoinGecko API](https://www.coingecko.com/en/api)
 
-### 4.10 Google Trends
+### 4.8 Google Trends
 
 - Free proxy for retail investor sentiment, search-driven panic, and attention spikes. Elevated search interest in terms like "recession", "crash", "bankruptcy" correlates with regime transitions.
 - [Google Trends](https://trends.google.com/)
 
-### 4.14 Financial News & Sentiment (Future Extension)
+### 4.9 Financial News & Sentiment (Future Extension)
 
 - News embeddings and sentiment data to investigate multimodal information in regime detection.
+
+### 4.10 Downloaded Data Headers (Local)
+
+All downloaded data files are stored in `data-headers/` for reference.
+
+**Yahoo Finance (11 tickers)** -- `Date, Open, High, Low, Close, Volume, Dividends, Stock Splits`
+
+| File | Ticker |
+|---|---|
+| `yahoo_sp500.csv` | ^GSPC |
+| `yahoo_nasdaq.csv` | ^NDX |
+| `yahoo_dow.csv` | ^DJI |
+| `yahoo_vix.csv` | ^VIX |
+| `yahoo_crude_oil.csv` | CL=F |
+| `yahoo_gold.csv` | GC=F |
+| `yahoo_eurusd.csv` | EURUSD=X |
+| `yahoo_usdjpy.csv` | JPY=X |
+| `yahoo_aapl.csv` | AAPL |
+| `yahoo_msft.csv` | MSFT |
+| `yahoo_nvda.csv` | NVDA |
+
+**Kenneth French Data Library (3 files)** -- `Date, Mkt-RF, SMB, HML, RF` (+ RMW, CMA for 5-Factor)
+
+| File | Description | Rows |
+|---|---|---|
+| `french_3factor.csv` | Fama/French 3 Factors (Daily, 1926-present) | 26,276 |
+| `french_5factor.csv` | Fama/French 5 Factors 2x3 (Daily, 1963-present) | 15,856 |
+| `french_momentum.csv` | Momentum Factor Mom (Daily, 1926-present) | 26,187 |
+
+**Treasury.gov Yield Curve** -- `Date, 1Mo, 2Mo, 3Mo, 4Mo, 6Mo, 1Yr, 2Yr, 3Yr, 5Yr, 7Yr, 10Yr, 20Yr, 30Yr`
+
+| File | Rows |
+|---|---|
+| `treasury_yield_curve.csv` | 250 (daily 2024) |
+
+**BLS (3 series)** -- `year, period, periodName, value`
+
+| File | Series | Description |
+|---|---|---|
+| `bls_cpi.json` | CUSR0000SA0 | CPI-U All Items |
+| `bls_multi.json` | CUSR0000SA0, LNS14000000, LNS11000000 | CPI, Unemployment Rate, Civilian Labor Force |
+
+**CoinGecko (3 endpoints)** -- JSON
+
+| File | Endpoint | Fields |
+|---|---|---|
+| `coingecko_markets.json` | /coins/markets | current_price, market_cap, volume, high_24h, low_24h, price_change_24h, 26 fields total |
+| `coingecko_global.json` | /global | active_cryptocurrencies, total_market_cap, market_cap_percentage, volume |
+| `coingecko_ohlc.json` | /coins/bitcoin/ohlc | [timestamp, open, high, low, close] |
+
+**CBOE VIX Historical** -- `date, volume, open, high, low, close`
+
+| File | Description |
+|---|---|
+| `cboe_vix.json` | VIX daily OHLCV (1990-present) |
+
+**Google Trends** -- `date, recession, stock market crash, bankruptcy, inflation, unemployment, isPartial`
+
+| File | Description |
+|---|---|
+| `google_trends.csv` | Weekly search interest for risk-related terms |
 
 ---
 
@@ -284,7 +336,7 @@ The system identifies major factors contributing to each warning:
 
 ```
 Multi-Source Financial Data Ingestion
-    (FRED, CBOE, Yahoo Finance, Kenneth French, Indian Markets, BLS, Treasury.gov, Stooq, CoinGecko, Google Trends)
+    (FRED, CBOE, Yahoo Finance, Kenneth French, BLS, Treasury.gov, CoinGecko, Google Trends)
         |
         v
 Cleaning and Versioning Pipeline
