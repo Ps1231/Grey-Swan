@@ -136,6 +136,7 @@ def get_regime_timeline():
     df["date"] = pd.to_datetime(df["date"])
     monthly = df.set_index("date").resample("ME")["regime"].agg(lambda x: x.mode()[0] if len(x) > 0 else 0)
     monthly = monthly.reset_index()
+    monthly = monthly.tail(60)
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m")
     return {"dates": monthly["date"].tolist(), "regimes": monthly["regime"].tolist()}
 
