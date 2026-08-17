@@ -614,13 +614,12 @@ def download_trends():
                 pytrends.build_payload([term], timeframe="2015-01-01 2026-01-01")
                 df = pytrends.interest_over_time()
                 if not df.empty:
-                    all_data[term] = df[term].to_dict()
+                    all_data[term] = {str(k): v for k, v in df[term].to_dict().items()}
                 time.sleep(1)  # rate limit
             except Exception as e:
                 console.print(f"    [yellow]warn[/] {term}: {e}")
                 time.sleep(2)
 
-        out = DATA_DIR / "trends" / "google_trends_historical.json"
         save_json(out, all_data)
         elapsed = time.time() - t0
         record(source, "google_trends_historical.json", out, elapsed, True)
