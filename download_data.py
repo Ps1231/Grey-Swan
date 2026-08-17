@@ -1,7 +1,7 @@
 """
 Grey-Swan Full Dataset Downloader
 ==================================
-Downloads complete historical data from all 8 sources.
+Downloads complete historical data from all 10 sources.
 Uses rich for terminal output, tracks file sizes and download times.
 
 Usage:
@@ -12,7 +12,9 @@ Usage:
     python download_data.py --bls        # bls only
     python download_data.py --coingecko  # coingecko only
     python download_data.py --cboe       # cboe only
-    python download_data.py --fred       # fred/yfinance only
+    python download_data.py --fred       # fred/yfinance + fred indicators
+    python download_data.py --fred-ind   # fred financial indicators only
+    python download_data.py --sec        # sec edgar only
     python download_data.py --trends     # google trends only
 """
 
@@ -389,6 +391,137 @@ def download_fred():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 7b. FRED FINANCIAL MARKET INDICATORS (direct CSV from fred.stlouisfed.org)
+# ══════════════════════════════════════════════════════════════════════════
+
+FRED_INDICATORS = {
+    "ted_spread":           "STLFSI3",
+    "financial_stress":     "STLFSI3",
+    "high_yield_oas":       "BAMLH0A0HYM2",
+    "3m_tbill_secondary":   "DTB3",
+    "fed_funds_rate":       "DFF",
+    "usd_eur":              "DEXUSEU",
+    "sp500":                "SP500",
+    "vix_cls":              "VIXCLS",
+    "dgs10":                "DGS10",
+    "dgs2":                 "DGS2",
+}
+
+
+def download_fred_indicators():
+    """Download FRED series directly via their CSV endpoint."""
+    source = "FRED Indicators"
+    for name, series_id in FRED_INDICATORS.items():
+        out = DATA_DIR / "fred_indicators" / f"fred_{name}.csv"
+        t0 = time.time()
+        try:
+            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+            raw = fetch(url, timeout=30).decode("utf-8")
+            lines = raw.strip().split("\n")
+            if lines and (lines[0].startswith("DATE") or lines[0].startswith("DATE,")):
+                save_text(out, raw)
+                elapsed = time.time() - t0
+                record(source, f"fred_{name}.csv", out, elapsed, True)
+                console.print(f"  [green]✓[/] {name:22s} ({series_id:12s}) → {len(lines)-1:,} rows, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+            else:
+                raise ValueError(f"unexpected header: {lines[0][:60] if lines else 'empty'}")
+        except Exception as e:
+            elapsed = time.time() - t0
+            record(source, f"fred_{name}.csv", out, elapsed, False, str(e))
+            console.print(f"  [red]✗[/] {name:22s} ({series_id:12s}) → {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 9. SEC EDGAR
+# ══════════════════════════════════════════════════════════════════════════
+
+SEC_HEADERS = {
+    "User-Agent": "Grey-Swan/1.0 (research project; contact@example.com)",
+    "Accept": "application/json",
+}
+
+
+def download_sec():
+    """Download SEC EDGAR datasets: company facts, submissions, and form 8-K index."""
+    source = "SEC EDGAR"
+    out_dir = DATA_DIR / "sec"
+
+    # 1. Company Facts API (XBRL financial statements for all companies)
+    t0 = time.time()
+    try:
+        url = "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"  # Apple as sample
+        req = urllib.request.Request(url, headers=SEC_HEADERS)
+        resp = urllib.request.urlopen(req, timeout=60, context=CTX)
+        data = json.loads(resp.read().decode())
+        out = out_dir / "sec_companyfacts_aapl.json"
+        save_json(out, data)
+        elapsed = time.time() - t0
+        facts = data.get("facts", {}).get("us-gaap", {})
+        record(source, "sec_companyfacts_aapl.json", out, elapsed, True)
+        console.print(f"  [green]✓[/] companyfacts (AAPL) → {len(facts)} us-gaap concepts, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+    except Exception as e:
+        elapsed = time.time() - t0
+        record(source, "sec_companyfacts_aapl.json", out, elapsed, False, str(e))
+        console.print(f"  [red]✗[/] companyfacts (AAPL) → {e}")
+
+    # 2. Full-Text Search / Submissions for a sample company
+    t0 = time.time()
+    try:
+        url = "https://data.sec.gov/submissions/CIK0000320193.json"
+        req = urllib.request.Request(url, headers=SEC_HEADERS)
+        resp = urllib.request.urlopen(req, timeout=60, context=CTX)
+        data = json.loads(resp.read().decode())
+        out = out_dir / "sec_submissions_aapl.json"
+        save_json(out, data)
+        elapsed = time.time() - t0
+        recent = data.get("filings", {}).get("recent", {})
+        n_filings = len(recent.get("form", [])) if recent else 0
+        record(source, "sec_submissions_aapl.json", out, elapsed, True)
+        console.print(f"  [green]✓[/] submissions (AAPL) → {n_filings} recent filings, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+    except Exception as e:
+        elapsed = time.time() - t0
+        record(source, "sec_submissions_aapl.json", out, elapsed, False, str(e))
+        console.print(f"  [red]✗[/] submissions (AAPL) → {e}")
+
+    # 3. Form 8-K recent filings index
+    t0 = time.time()
+    try:
+        url = "https://efts.sec.gov/LATEST/search-index?q=%228-K%22&dateRange=custom&startdt=2024-01-01&enddt=2026-12-31&forms=8-K&hits.hits.total=true&hits.hits._source=file_date,display_names,entity_name"
+        req = urllib.request.Request(url, headers=SEC_HEADERS)
+        resp = urllib.request.urlopen(req, timeout=60, context=CTX)
+        data = json.loads(resp.read().decode())
+        out = out_dir / "sec_8k_index.json"
+        save_json(out, data)
+        elapsed = time.time() - t0
+        total = data.get("hits", {}).get("total", {}).get("value", 0) if isinstance(data.get("hits", {}).get("total"), dict) else 0
+        record(source, "sec_8k_index.json", out, elapsed, True)
+        console.print(f"  [green]✓[/] 8-K index → {total:,} filings, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+    except Exception as e:
+        elapsed = time.time() - t0
+        record(source, "sec_8k_index.json", out, elapsed, False, str(e))
+        console.print(f"  [red]✗[/] 8-K index → {e}")
+
+    # 4. Financial Statement Notes datasets (bulk download link info)
+    t0 = time.time()
+    try:
+        url = "https://www.sec.gov/data-research/sec-markets-data/financial-statement-notes-data-sets"
+        req = urllib.request.Request(url, headers={"User-Agent": "Grey-Swan/1.0 (research project; contact@example.com)", "Accept": "text/html"})
+        resp = urllib.request.urlopen(req, timeout=30, context=CTX)
+        html = resp.read().decode("utf-8", errors="replace")
+        import re
+        zip_links = re.findall(r'href="([^"]*\.zip)"', html)
+        out = out_dir / "sec_notes_dataset_links.json"
+        save_json(out, {"download_links": zip_links, "source_url": url, "note": "These are bulk XML zip files for financial statement notes"})
+        elapsed = time.time() - t0
+        record(source, "sec_notes_dataset_links.json", out, elapsed, True)
+        console.print(f"  [green]✓[/] notes dataset links → {len(zip_links)} zip files found, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
+    except Exception as e:
+        elapsed = time.time() - t0
+        record(source, "sec_notes_dataset_links.json", out, elapsed, False, str(e))
+        console.print(f"  [red]✗[/] notes dataset links → {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # 8. GOOGLE TRENDS (via pytrends)
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -487,11 +620,14 @@ def main():
     parser.add_argument("--coingecko",action="store_true", help="Download CoinGecko only")
     parser.add_argument("--cboe",     action="store_true", help="Download CBOE only")
     parser.add_argument("--fred",     action="store_true", help="Download FRED (via yfinance) only")
+    parser.add_argument("--fred-ind", action="store_true", help="Download FRED financial indicators only")
+    parser.add_argument("--sec",      action="store_true", help="Download SEC EDGAR only")
     parser.add_argument("--trends",   action="store_true", help="Download Google Trends only")
     args = parser.parse_args()
 
     run_all = not any([args.yahoo, args.french, args.treasury, args.bls,
-                       args.coingecko, args.cboe, args.fred, args.trends])
+                       args.coingecko, args.cboe, args.fred, args.fred_ind,
+                       args.sec, args.trends])
 
     console.print(Panel.fit(
         "[bold]Grey-Swan Dataset Downloader[/]\n"
@@ -503,35 +639,43 @@ def main():
     t_total = time.time()
 
     if run_all or args.yahoo:
-        console.print("\n[bold blue]1/8 Yahoo Finance[/]")
+        console.print("\n[bold blue]1/10 Yahoo Finance[/]")
         download_yahoo()
 
     if run_all or args.french:
-        console.print("\n[bold blue]2/8 Kenneth French[/]")
+        console.print("\n[bold blue]2/10 Kenneth French[/]")
         download_french()
 
     if run_all or args.treasury:
-        console.print("\n[bold blue]3/8 Treasury.gov[/]")
+        console.print("\n[bold blue]3/10 Treasury.gov[/]")
         download_treasury()
 
     if run_all or args.bls:
-        console.print("\n[bold blue]4/8 Bureau of Labor Statistics[/]")
+        console.print("\n[bold blue]4/10 Bureau of Labor Statistics[/]")
         download_bls()
 
     if run_all or args.coingecko:
-        console.print("\n[bold blue]5/8 CoinGecko[/]")
+        console.print("\n[bold blue]5/10 CoinGecko[/]")
         download_coingecko()
 
     if run_all or args.cboe:
-        console.print("\n[bold blue]6/8 CBOE[/]")
+        console.print("\n[bold blue]6/10 CBOE[/]")
         download_cboe()
 
     if run_all or args.fred:
-        console.print("\n[bold blue]7/8 FRED (via yfinance)[/]")
+        console.print("\n[bold blue]7/10 FRED (via yfinance)[/]")
         download_fred()
 
+    if run_all or args.fred_ind:
+        console.print("\n[bold blue]8/10 FRED Financial Market Indicators[/]")
+        download_fred_indicators()
+
+    if run_all or args.sec:
+        console.print("\n[bold blue]9/10 SEC EDGAR[/]")
+        download_sec()
+
     if run_all or args.trends:
-        console.print("\n[bold blue]8/8 Google Trends[/]")
+        console.print("\n[bold blue]10/10 Google Trends[/]")
         download_trends()
 
     elapsed_total = time.time() - t_total
