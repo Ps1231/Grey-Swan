@@ -539,11 +539,17 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
 def run_automl(X_train, y_train, X_val, y_val, n_trials=100):
     """Optuna AutoML: searches over XGBoost, LightGBM, RF hyperparameters."""
     import optuna
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
     console.print(f"\n  [cyan]Optuna AutoML ({n_trials} trials)...[/]")
 
+    best_value = 0.0
+    best_trial_num = 0
+
     def objective(trial):
+        nonlocal best_value, best_trial_num
+        trial_num = trial.number + 1
         model_type = trial.suggest_categorical("model", ["xgboost", "lightgbm", "rf"])
 
         if model_type == "xgboost":
@@ -591,10 +597,32 @@ def run_automl(X_train, y_train, X_val, y_val, n_trials=100):
             model.fit(X_train, y_train)
 
         prob = model.predict_proba(X_val)[:, 1]
-        return average_precision_score(y_val, prob)
+        score = average_precision_score(y_val, prob)
 
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        if score > best_value:
+            best_value = score
+            best_trial_num = trial_num
+
+        return score
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=40),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TextColumn("Best: {task.fields[best_score]:.4f}"),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("  Optuna search", total=n_trials, best_score=0.0)
+
+        def callback(study, trial):
+            nonlocal best_value
+            progress.update(task, advance=1, best_score=best_value)
+
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False, callbacks=[callback])
 
     best = study.best_trial
     console.print(f"  Best PR-AUC: {best.value:.4f} ({best.params['model']})")
