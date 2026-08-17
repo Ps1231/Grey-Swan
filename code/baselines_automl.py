@@ -231,10 +231,14 @@ def run_lightgbm(X_train, y_train, X_val, y_val, X_test, y_test):
 
 
 def run_lstm(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
-    """LSTM baseline with sequence input."""
+    """LSTM baseline with sequence input (CPU-optimized)."""
     console.print("  [cyan]LSTM...[/]")
 
+    torch.set_num_threads(min(8, torch.get_num_threads()))
     seq_len = 20
+    proj_dim = 32
+    hidden = 32
+    epochs = 20
 
     def make_sequences(X, y, seq_len):
         Xs, ys = [], []
@@ -259,7 +263,6 @@ def run_lstm(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
     yva_t = torch.FloatTensor(yva)
     Xte_t = torch.FloatTensor(Xte_seq)
 
-    # Handle class imbalance with manual weighted BCE
     pw = (ytr == 0).sum() / max((ytr == 1).sum(), 1)
 
     def weighted_bce(pred, target):
@@ -268,32 +271,36 @@ def run_lstm(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
         return (bce * weight).mean()
 
     class LSTMModel(nn.Module):
-        def __init__(self, input_dim, hidden=64, dropout=0.3):
+        def __init__(self, input_dim, proj_dim, hidden, dropout=0.3):
             super().__init__()
-            self.lstm = nn.LSTM(input_dim, hidden, num_layers=2,
-                                batch_first=True, dropout=dropout)
+            self.proj = nn.Sequential(
+                nn.Linear(input_dim, proj_dim), nn.ReLU(), nn.Dropout(dropout),
+            )
+            self.lstm = nn.LSTM(proj_dim, hidden, num_layers=1,
+                                batch_first=True, dropout=0.0)
             self.head = nn.Sequential(
-                nn.Linear(hidden, 32), nn.ReLU(), nn.Dropout(dropout),
-                nn.Linear(32, 1), nn.Sigmoid()
+                nn.Linear(hidden, 16), nn.ReLU(), nn.Dropout(dropout),
+                nn.Linear(16, 1), nn.Sigmoid()
             )
         def forward(self, x):
+            x = self.proj(x)
             out, _ = self.lstm(x)
             return self.head(out[:, -1, :]).squeeze(-1)
 
-    model = LSTMModel(n_features)
+    model = LSTMModel(n_features, proj_dim, hidden)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
     best_val_loss = float("inf")
     best_state = None
 
     train_ds = TensorDataset(Xtr_t, ytr_t)
-    train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=512, shuffle=True)
 
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
     with Progress(SpinnerColumn(), TextColumn("[cyan]LSTM[/] {task.description}"),
                   BarColumn(20), TextColumn("{task.fields[val_loss]:.4f}"), TimeElapsedColumn(),
                   console=console, transient=True) as progress:
-        task = progress.add_task("training", total=30, val_loss=float("inf"))
-        for epoch in range(30):
+        task = progress.add_task("training", total=epochs, val_loss=float("inf"))
+        for epoch in range(epochs):
             model.train()
             for xb, yb in train_dl:
                 optimizer.zero_grad()
@@ -343,10 +350,13 @@ class TCNBlock(nn.Module):
 
 
 def run_tcn(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
-    """Temporal Convolutional Network baseline."""
+    """Temporal Convolutional Network baseline (CPU-optimized)."""
     console.print("  [cyan]TCN...[/]")
 
+    torch.set_num_threads(min(8, torch.get_num_threads()))
     seq_len = 20
+    proj_dim = 32
+    epochs = 20
 
     def make_sequences(X, y, seq_len):
         Xs, ys = [], []
@@ -378,34 +388,38 @@ def run_tcn(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
         return (bce * weight).mean()
 
     class TCNModel(nn.Module):
-        def __init__(self, input_dim, dropout=0.3):
+        def __init__(self, input_dim, proj_dim, dropout=0.3):
             super().__init__()
+            self.proj = nn.Sequential(
+                nn.Conv1d(input_dim, proj_dim, 1), nn.ReLU(),
+            )
             self.tcn = nn.Sequential(
-                TCNBlock(input_dim, 64, 3, dropout),
-                TCNBlock(64, 32, 3, dropout),
+                TCNBlock(proj_dim, 32, 3, dropout),
+                TCNBlock(32, 16, 3, dropout),
             )
             self.head = nn.Sequential(
                 nn.AdaptiveAvgPool1d(1), nn.Flatten(),
-                nn.Linear(32, 16), nn.ReLU(), nn.Dropout(dropout),
-                nn.Linear(16, 1), nn.Sigmoid()
+                nn.Linear(16, 8), nn.ReLU(), nn.Dropout(dropout),
+                nn.Linear(8, 1), nn.Sigmoid()
             )
         def forward(self, x):
+            x = self.proj(x)
             return self.head(self.tcn(x)).squeeze(-1)
 
-    model = TCNModel(n_features)
+    model = TCNModel(n_features, proj_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
     best_val_loss = float("inf")
     best_state = None
 
     train_ds = TensorDataset(Xtr_t, ytr_t)
-    train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=512, shuffle=True)
 
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
     with Progress(SpinnerColumn(), TextColumn("[cyan]TCN[/] {task.description}"),
                   BarColumn(20), TextColumn("{task.fields[val_loss]:.4f}"), TimeElapsedColumn(),
                   console=console, transient=True) as progress:
-        task = progress.add_task("training", total=30, val_loss=float("inf"))
-        for epoch in range(30):
+        task = progress.add_task("training", total=epochs, val_loss=float("inf"))
+        for epoch in range(epochs):
             model.train()
             for xb, yb in train_dl:
                 optimizer.zero_grad()
@@ -454,11 +468,13 @@ class TransformerBlock(nn.Module):
 
 
 def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
-    """Standard Transformer baseline."""
+    """Standard Transformer baseline (CPU-optimized)."""
     console.print("  [cyan]Transformer...[/]")
 
+    torch.set_num_threads(min(8, torch.get_num_threads()))
     seq_len = 20
-    d_model = 64
+    d_model = 32
+    epochs = 20
 
     def make_sequences(X, y, seq_len):
         Xs, ys = [], []
@@ -490,17 +506,17 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
         return (bce * weight).mean()
 
     class TransformerModel(nn.Module):
-        def __init__(self, input_dim, d_model, n_heads=4, dropout=0.3):
+        def __init__(self, input_dim, d_model, n_heads=2, dropout=0.3):
             super().__init__()
             self.proj = nn.Linear(input_dim, d_model)
             self.pos_emb = nn.Parameter(torch.randn(1, 100, d_model) * 0.02)
             self.layers = nn.ModuleList([
-                TransformerBlock(d_model, n_heads, dropout) for _ in range(2)
+                TransformerBlock(d_model, n_heads, dropout) for _ in range(1)
             ])
             self.head = nn.Sequential(
                 nn.AdaptiveAvgPool1d(1), nn.Flatten(),
-                nn.Linear(d_model, 32), nn.GELU(), nn.Dropout(dropout),
-                nn.Linear(32, 1), nn.Sigmoid()
+                nn.Linear(d_model, 16), nn.GELU(), nn.Dropout(dropout),
+                nn.Linear(16, 1), nn.Sigmoid()
             )
         def forward(self, x):
             x = self.proj(x) + self.pos_emb[:, :x.size(1), :]
@@ -514,14 +530,14 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
     best_state = None
 
     train_ds = TensorDataset(Xtr_t, ytr_t)
-    train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=512, shuffle=True)
 
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
     with Progress(SpinnerColumn(), TextColumn("[cyan]Transformer[/] {task.description}"),
                   BarColumn(20), TextColumn("{task.fields[val_loss]:.4f}"), TimeElapsedColumn(),
                   console=console, transient=True) as progress:
-        task = progress.add_task("training", total=30, val_loss=float("inf"))
-        for epoch in range(30):
+        task = progress.add_task("training", total=epochs, val_loss=float("inf"))
+        for epoch in range(epochs):
             model.train()
             for xb, yb in train_dl:
                 optimizer.zero_grad()
@@ -536,6 +552,8 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
                 val_loss = weighted_bce(val_pred, yva_t).item()
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
+                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            progress.update(task, advance=1, val_loss=val_loss)
                     best_state = {k: v.clone() for k, v in model.state_dict().items()}
             progress.update(task, advance=1, val_loss=val_loss)
 
