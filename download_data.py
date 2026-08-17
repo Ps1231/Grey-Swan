@@ -1,7 +1,7 @@
 """
 Grey-Swan Full Dataset Downloader
 ==================================
-Downloads complete historical data from all 10 sources.
+Downloads complete historical data from all 9 sources.
 Uses rich for terminal output, tracks file sizes and download times.
 
 Usage:
@@ -12,8 +12,7 @@ Usage:
     python download_data.py --bls        # bls only
     python download_data.py --coingecko  # coingecko only
     python download_data.py --cboe       # cboe only
-    python download_data.py --fred       # fred/yfinance + fred indicators
-    python download_data.py --fred-ind   # fred financial indicators only
+    python download_data.py --fred       # fred/yfinance only
     python download_data.py --sec        # sec edgar only
     python download_data.py --trends     # google trends only
 """
@@ -439,50 +438,6 @@ def download_fred():
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 7b. FRED FINANCIAL MARKET INDICATORS (direct CSV from fred.stlouisfed.org)
-# ══════════════════════════════════════════════════════════════════════════
-
-FRED_INDICATORS = {
-    "ted_spread":           "STLFSI3",
-    "financial_stress":     "STLFSI3",
-    "high_yield_oas":       "BAMLH0A0HYM2",
-    "3m_tbill_secondary":   "DTB3",
-    "fed_funds_rate":       "DFF",
-    "usd_eur":              "DEXUSEU",
-    "sp500":                "SP500",
-    "vix_cls":              "VIXCLS",
-    "dgs10":                "DGS10",
-    "dgs2":                 "DGS2",
-}
-
-
-def download_fred_indicators():
-    """Download FRED series directly via their CSV endpoint."""
-    source = "FRED Indicators"
-    for name, series_id in FRED_INDICATORS.items():
-        out = DATA_DIR / "fred_indicators" / f"fred_{name}.csv"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        if skip_if_exists(out, source, f"fred_{name}.csv"):
-            continue
-        t0 = time.time()
-        try:
-            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-            raw = fetch_with_retry(url, timeout=90, retries=3, backoff=5.0).decode("utf-8")
-            lines = raw.strip().split("\n")
-            if lines and (lines[0].startswith("DATE") or lines[0].startswith("DATE,")):
-                save_text(out, raw)
-                elapsed = time.time() - t0
-                record(source, f"fred_{name}.csv", out, elapsed, True)
-                console.print(f"  [green]✓[/] {name:22s} ({series_id:12s}) → {len(lines)-1:,} rows, {human_size(out.stat().st_size)}, {elapsed:.1f}s")
-            else:
-                raise ValueError(f"unexpected header: {lines[0][:60] if lines else 'empty'}")
-        except Exception as e:
-            elapsed = time.time() - t0
-            record(source, f"fred_{name}.csv", out, elapsed, False, str(e))
-            console.print(f"  [red]✗[/] {name:22s} ({series_id:12s}) → {e}")
-
-
-# ══════════════════════════════════════════════════════════════════════════
 # 9. SEC EDGAR
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -680,13 +635,12 @@ def main():
     parser.add_argument("--coingecko",action="store_true", help="Download CoinGecko only")
     parser.add_argument("--cboe",     action="store_true", help="Download CBOE only")
     parser.add_argument("--fred",     action="store_true", help="Download FRED (via yfinance) only")
-    parser.add_argument("--fred-ind", action="store_true", help="Download FRED financial indicators only")
     parser.add_argument("--sec",      action="store_true", help="Download SEC EDGAR only")
     parser.add_argument("--trends",   action="store_true", help="Download Google Trends only")
     args = parser.parse_args()
 
     run_all = not any([args.yahoo, args.french, args.treasury, args.bls,
-                       args.coingecko, args.cboe, args.fred, args.fred_ind,
+                       args.coingecko, args.cboe, args.fred,
                        args.sec, args.trends])
 
     console.print(Panel.fit(
@@ -699,43 +653,39 @@ def main():
     t_total = time.time()
 
     if run_all or args.yahoo:
-        console.print("\n[bold blue]1/10 Yahoo Finance[/]")
+        console.print("\n[bold blue]1/9 Yahoo Finance[/]")
         download_yahoo()
 
     if run_all or args.french:
-        console.print("\n[bold blue]2/10 Kenneth French[/]")
+        console.print("\n[bold blue]2/9 Kenneth French[/]")
         download_french()
 
     if run_all or args.treasury:
-        console.print("\n[bold blue]3/10 Treasury.gov[/]")
+        console.print("\n[bold blue]3/9 Treasury.gov[/]")
         download_treasury()
 
     if run_all or args.bls:
-        console.print("\n[bold blue]4/10 Bureau of Labor Statistics[/]")
+        console.print("\n[bold blue]4/9 Bureau of Labor Statistics[/]")
         download_bls()
 
     if run_all or args.coingecko:
-        console.print("\n[bold blue]5/10 CoinGecko[/]")
+        console.print("\n[bold blue]5/9 CoinGecko[/]")
         download_coingecko()
 
     if run_all or args.cboe:
-        console.print("\n[bold blue]6/10 CBOE[/]")
+        console.print("\n[bold blue]6/9 CBOE[/]")
         download_cboe()
 
     if run_all or args.fred:
-        console.print("\n[bold blue]7/10 FRED (via yfinance)[/]")
+        console.print("\n[bold blue]7/9 FRED (via yfinance)[/]")
         download_fred()
 
-    if run_all or args.fred_ind:
-        console.print("\n[bold blue]8/10 FRED Financial Market Indicators[/]")
-        download_fred_indicators()
-
     if run_all or args.sec:
-        console.print("\n[bold blue]9/10 SEC EDGAR[/]")
+        console.print("\n[bold blue]8/9 SEC EDGAR[/]")
         download_sec()
 
     if run_all or args.trends:
-        console.print("\n[bold blue]10/10 Google Trends[/]")
+        console.print("\n[bold blue]9/9 Google Trends[/]")
         download_trends()
 
     elapsed_total = time.time() - t_total
