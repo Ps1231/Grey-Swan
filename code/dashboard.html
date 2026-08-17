@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grey-Swan | Market Regime Detection</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: rgba(255,255,255,0.03);
+    --glass: rgba(255,255,255,0.05);
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-hover: rgba(255,255,255,0.08);
+    --green: #00e676;
+    --green-dim: rgba(0,230,118,0.15);
+    --green-glow: rgba(0,230,118,0.3);
+    --red: #ff5252;
+    --red-dim: rgba(255,82,82,0.15);
+    --amber: #ffc107;
+    --amber-dim: rgba(255,193,7,0.15);
+    --purple: #bb86fc;
+    --purple-dim: rgba(187,134,252,0.15);
+    --cyan: #18ffff;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --text-bright: #fff;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background:
+      radial-gradient(ellipse at 20% 20%, rgba(0,230,118,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(0,230,118,0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 0%, var(--bg) 70%);
+    z-index: -1;
+    animation: bgShift 20s ease-in-out infinite alternate;
+  }
+
+  @keyframes bgShift {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    100% { transform: translate(-2%, -2%) rotate(3deg); }
+  }
+
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    transition: all 0.3s ease;
+  }
+
+  .glass:hover {
+    background: var(--glass-hover);
+    border-color: rgba(0,230,118,0.15);
+    box-shadow: 0 8px 32px rgba(0,230,118,0.05);
+  }
+
+  header {
+    padding: 24px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-icon {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--green), #00c853);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: var(--bg);
+  }
+
+  .logo h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+  }
+
+  .logo span {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 400;
+    display: block;
+    margin-top: 1px;
+  }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .status-pill .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  main {
+    padding: 32px 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--glass-border);
+  }
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    border-radius: 3px 0 0 3px;
+  }
+
+  .stat-card.green::before { background: var(--green); }
+  .stat-card.red::before { background: var(--red); }
+  .stat-card.amber::before { background: var(--amber); }
+  .stat-card.purple::before { background: var(--purple); }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-bright);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .stat-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .card {
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .badge-green { background: var(--green-dim); color: var(--green); }
+  .badge-red { background: var(--red-dim); color: var(--red); }
+  .badge-amber { background: var(--amber-dim); color: var(--amber); }
+  .badge-purple { background: var(--purple-dim); color: var(--purple); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  tbody tr:hover {
+    background: rgba(0,230,118,0.03);
+  }
+
+  .bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .bar-label {
+    width: 100px;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 24px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 1s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--bg);
+  }
+
+  .bar-fill.green { background: linear-gradient(90deg, var(--green), #00c853); }
+  .bar-fill.amber { background: linear-gradient(90deg, var(--amber), #ff9800); }
+  .bar-fill.red { background: linear-gradient(90deg, var(--red), #d32f2f); }
+  .bar-fill.purple { background: linear-gradient(90deg, var(--purple), #7c4dff); }
+  .bar-fill.cyan { background: linear-gradient(90deg, var(--cyan), #00bcd4); }
+
+  .risk-gauge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 32px;
+  }
+
+  .gauge-ring {
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+
+  .gauge-ring::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.05);
+  }
+
+  .gauge-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    border-top-color: var(--green);
+    border-right-color: var(--green);
+    animation: gaugeRotate 3s ease-in-out infinite alternate;
+  }
+
+  @keyframes gaugeRotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .gauge-inner {
+    text-align: center;
+  }
+
+  .gauge-value {
+    font-size: 36px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-bright);
+  }
+
+  .gauge-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .mini-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 60px;
+    padding: 8px 0;
+  }
+
+  .mini-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    min-height: 4px;
+    transition: height 0.5s ease;
+    cursor: pointer;
+  }
+
+  .mini-bar:hover {
+    opacity: 0.8;
+    transform: scaleY(1.1);
+    transform-origin: bottom;
+  }
+
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .loading::before {
+    content: '';
+    width: 16px; height: 16px;
+    border: 2px solid var(--glass-border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 10px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    width: fit-content;
+  }
+
+  .nav-tab {
+    padding: 8px 18px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .nav-tab:hover { color: var(--text); }
+
+  .nav-tab.active {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .regime-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+
+  .regime-0 { background: #2ecc71; }
+  .regime-1 { background: #f39c12; }
+  .regime-2 { background: #e67e22; }
+  .regime-3 { background: #e74c3c; }
+  .regime-4 { background: #8e44ad; }
+
+  .viz-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .viz-card {
+    overflow: hidden;
+  }
+
+  .viz-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+    opacity: 0.9;
+    transition: opacity 0.3s;
+  }
+
+  .viz-card img:hover { opacity: 1; }
+
+  footer {
+    padding: 24px 40px;
+    border-top: 1px solid var(--glass-border);
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    header { padding: 16px 20px; }
+    main { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">GS</div>
+    <div>
+      <h1>Grey-Swan</h1>
+      <span>Spatiotemporal Regime Detection</span>
+    </div>
+  </div>
+  <div class="status-bar">
+    <div class="status-pill glass">
+      <span class="dot" id="status-dot" style="background:var(--green)"></span>
+      <span id="status-text">Loading...</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- KPI Cards -->
+  <div class="section-title">Overview</div>
+  <div class="grid-4" id="kpi-cards">
+    <div class="stat-card glass green">
+      <div class="stat-label">Current Regime</div>
+      <div class="stat-value" id="kpi-regime">--</div>
+      <div class="stat-sub" id="kpi-regime-date">--</div>
+    </div>
+    <div class="stat-card glass amber">
+      <div class="stat-label">Extreme 5d Risk</div>
+      <div class="stat-value" id="kpi-risk">--</div>
+      <div class="stat-sub">Tail-event probability</div>
+    </div>
+    <div class="stat-card glass purple">
+      <div class="stat-label">PR-AUC (5d)</div>
+      <div class="stat-value" id="kpi-prauc">--</div>
+      <div class="stat-sub">Grey-Swan precision-recall</div>
+    </div>
+    <div class="stat-card glass green">
+      <div class="stat-label">Graph Snapshots</div>
+      <div class="stat-value" id="kpi-graphs">--</div>
+      <div class="stat-sub" id="kpi-features">--</div>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-tab="regimes">Regimes</button>
+    <button class="nav-tab" data-tab="models">Models</button>
+    <button class="nav-tab" data-tab="predictions">Predictions</button>
+    <button class="nav-tab" data-tab="visualizations">Visualizations</button>
+  </div>
+
+  <!-- Regimes Tab -->
+  <div class="tab-content active" id="tab-regimes">
+    <div class="grid-2">
+      <div class="card glass">
+        <div class="card-header">
+          <div class="card-title">Regime Distribution</div>
+          <span class="badge badge-green">All Time</span>
+        </div>
+        <div id="regime-dist" class="bar-chart"><div class="loading">Loading...</div></div>
+      </div>
+      <div class="card glass">
+        <div class="card-header">
+          <div class="card-title">Regime Timeline</div>
+          <span class="badge badge-purple">Monthly</span>
+        </div>
+        <div id="regime-timeline" class="mini-chart"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+    <div class="card glass">
+      <div class="card-header">
+        <div class="card-title">Recent Regime Data</div>
+        <span class="badge badge-amber">Last 500 days</span>
+      </div>
+      <div style="overflow-x:auto; max-height:300px; overflow-y:auto;">
+        <table id="regime-table"><tbody><tr><td class="loading">Loading...</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Models Tab -->
+  <div class="tab-content" id="tab-models">
+    <div class="grid-2">
+      <div class="card glass">
+        <div class="card-header">
+          <div class="card-title">Ablation Results</div>
+          <span class="badge badge-green">Grey-Swan</span>
+        </div>
+        <div id="ablation-chart"><div class="loading">Loading...</div></div>
+      </div>
+      <div class="card glass">
+        <div class="card-header">
+          <div class="card-title">Best Model</div>
+          <span class="badge badge-purple">AutoML</span>
+        </div>
+        <div class="risk-gauge" id="best-model-gauge">
+          <div class="gauge-ring">
+            <div class="gauge-inner">
+              <div class="gauge-value" id="gauge-prauc">--</div>
+              <div class="gauge-label">PR-AUC</div>
+            </div>
+          </div>
+          <div style="margin-top:16px; text-align:center;">
+            <div id="gauge-model" style="font-size:14px; font-weight:600; color:var(--text-bright);">--</div>
+            <div id="gauge-detail" style="font-size:12px; color:var(--text-dim); margin-top:4px;">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card glass">
+      <div class="card-header">
+        <div class="card-title">Model Comparison</div>
+      </div>
+      <div style="overflow-x:auto; max-height:400px; overflow-y:auto;">
+        <table id="models-table"><tbody><tr><td class="loading">Loading...</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Predictions Tab -->
+  <div class="tab-content" id="tab-predictions">
+    <div class="grid-3">
+      <div class="card glass" style="text-align:center;">
+        <div class="stat-label">5-Day Extreme Prob</div>
+        <div class="stat-value" id="pred-5d" style="font-size:32px; margin:12px 0;">--</div>
+        <div class="bar-track"><div class="bar-fill green" id="pred-5d-bar" style="width:0%"></div></div>
+      </div>
+      <div class="card glass" style="text-align:center;">
+        <div class="stat-label">10-Day Extreme Prob</div>
+        <div class="stat-value" id="pred-10d" style="font-size:32px; margin:12px 0;">--</div>
+        <div class="bar-track"><div class="bar-fill amber" id="pred-10d-bar" style="width:0%"></div></div>
+      </div>
+      <div class="card glass" style="text-align:center;">
+        <div class="stat-label">20-Day Extreme Prob</div>
+        <div class="stat-value" id="pred-20d" style="font-size:32px; margin:12px 0;">--</div>
+        <div class="bar-track"><div class="bar-fill red" id="pred-20d-bar" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="card glass">
+      <div class="card-header">
+        <div class="card-title">Prediction History</div>
+        <span class="badge badge-green">Last 200</span>
+      </div>
+      <div style="overflow-x:auto; max-height:400px; overflow-y:auto;">
+        <table id="pred-table"><tbody><tr><td class="loading">Loading...</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visualizations Tab -->
+  <div class="tab-content" id="tab-visualizations">
+    <div class="viz-grid" id="viz-grid"><div class="loading">Loading...</div></div>
+  </div>
+</main>
+
+<footer>
+  Grey-Swan: A Spatiotemporal Graph-Transformer Framework for Early Detection of Extreme Financial Market Regime Transitions
+</footer>
+
+<script>
+const API = '';
+
+const REGIME_NAMES = ['Normal', 'Elevated-Vol', 'Stress', 'Transition', 'Extreme'];
+const REGIME_COLORS = ['#2ecc71', '#f39c12', '#e67e22', '#e74c3c', '#8e44ad'];
+const REGIME_BADGES = ['badge-green', 'badge-amber', 'badge-amber', 'badge-red', 'badge-purple'];
+
+function regimeLabel(r) {
+  return `<span class="regime-dot regime-${r}"></span>${REGIME_NAMES[r] || r}`;
+}
+
+function regimeBadge(r) {
+  return `<span class="badge ${REGIME_BADGES[r] || 'badge-green'}">${REGIME_NAMES[r] || r}</span>`;
+}
+
+// Tabs
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+async function fetchJSON(url) {
+  try {
+    const res = await fetch(API + url);
+    return await res.json();
+  } catch (e) {
+    console.error('Fetch error:', url, e);
+    return null;
+  }
+}
+
+function el(id) { return document.getElementById(id); }
+
+function fmt(v, d=4) {
+  if (v === null || v === undefined || isNaN(v)) return '--';
+  return typeof v === 'number' ? v.toFixed(d) : v;
+}
+
+async function loadOverview() {
+  const d = await fetchJSON('/api/overview');
+  if (!d) return;
+
+  el('kpi-regime').innerHTML = regimeLabel(d.current_regime || 0);
+  el('kpi-regime-date').textContent = d.latest_date || '--';
+  el('kpi-risk').textContent = '--';
+  el('kpi-prauc').textContent = fmt(d.best_prauc_5d, 3);
+  el('kpi-graphs').textContent = d.graph_snapshots?.toLocaleString() || '--';
+  el('kpi-features').textContent = `${d.feature_count} features, ${d.master_rows?.toLocaleString()} rows`;
+  el('status-text').textContent = `v1.0 | ${d.master_rows?.toLocaleString() || 0} rows`;
+
+  document.title = `Grey-Swan | Regime: ${REGIME_NAMES[d.current_regime] || 'Unknown'}`;
+}
+
+async function loadRegimes() {
+  const [dist, timeline, data] = await Promise.all([
+    fetchJSON('/api/regimes/distribution'),
+    fetchJSON('/api/regimes/timeline'),
+    fetchJSON('/api/regimes'),
+  ]);
+
+  // Distribution
+  if (dist && dist.labels) {
+    const max = Math.max(...dist.counts);
+    const colors = ['green', 'amber', 'red', 'red', 'purple'];
+    el('regime-dist').innerHTML = dist.labels.map((l, i) => `
+      <div class="bar-row">
+        <div class="bar-label">${l}</div>
+        <div class="bar-track">
+          <div class="bar-fill ${colors[i] || 'green'}" style="width:${(dist.counts[i]/max*100).toFixed(1)}%">
+            ${dist.percentages[i]}%
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Timeline
+  if (timeline && timeline.dates) {
+    el('regime-timeline').innerHTML = timeline.regimes.map((r, i) => `
+      <div class="mini-bar" style="background:${REGIME_COLORS[r]}" title="${timeline.dates[i]}: ${REGIME_NAMES[r]}"></div>
+    `).join('');
+  }
+
+  // Table
+  if (data && data.length) {
+    const cols = Object.keys(data[0]);
+    el('regime-table').innerHTML = `
+      <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>${data.slice(-50).reverse().map(row => `
+        <tr>${cols.map(c => {
+          let v = row[c];
+          if (c === 'regime') v = regimeBadge(v);
+          else if (typeof v === 'number') v = fmt(v, 2);
+          else v = String(v).substring(0, 20);
+          return `<td>${v}</td>`;
+        }).join('')}</tr>
+      `).join('')}</tbody>
+    `;
+  }
+}
+
+async function loadModels() {
+  const [ablation, models] = await Promise.all([
+    fetchJSON('/api/models/ablation'),
+    fetchJSON('/api/models'),
+  ]);
+
+  // Ablation chart
+  if (ablation && ablation.length) {
+    const praucs = ablation.map(a => a.test_extreme_5d_prauc || 0);
+    const max = Math.max(...praucs, 0.01);
+    el('ablation-chart').innerHTML = ablation.map((a, i) => {
+      const pct = (praucs[i] / max * 100).toFixed(1);
+      const isFull = a.config === 11;
+      return `
+        <div class="bar-row" style="margin-bottom:6px;">
+          <div class="bar-label" style="width:140px; font-size:11px; ${isFull ? 'color:var(--green)' : ''}">${a.name || 'C'+a.config}</div>
+          <div class="bar-track">
+            <div class="bar-fill ${isFull ? 'green' : 'cyan'}" style="width:${pct}%">${fmt(praucs[i], 3)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Best model gauge
+    const best = ablation.reduce((a, b) => (a.test_extreme_5d_prauc || 0) > (b.test_extreme_5d_prauc || 0) ? a : b);
+    el('gauge-prauc').textContent = fmt(best.test_extreme_5d_prauc, 3);
+    el('gauge-model').textContent = best.name || `Config ${best.config}`;
+    el('gauge-detail').textContent = `${(best.params || 0).toLocaleString()} params | ${fmt(best.train_time, 0)}s`;
+  }
+
+  // Model comparison table
+  if (models && models.length) {
+    const cols = Object.keys(models[0]);
+    el('models-table').innerHTML = `
+      <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>${models.map(row => `
+        <tr>${cols.map(c => {
+          let v = row[c];
+          if (typeof v === 'number') v = fmt(v, 4);
+          else v = String(v).substring(0, 30);
+          return `<td>${v}</td>`;
+        }).join('')}</tr>
+      `).join('')}</tbody>
+    `;
+  }
+}
+
+async function loadPredictions() {
+  const [latest, history] = await Promise.all([
+    fetchJSON('/api/predictions/latest'),
+    fetchJSON('/api/predictions'),
+  ]);
+
+  if (latest && !latest.error) {
+    const prob5 = (latest.extreme_5d_prob * 100).toFixed(1);
+    const prob10 = (latest.extreme_10d_prob * 100).toFixed(1);
+    const prob20 = (latest.extreme_20d_prob * 100).toFixed(1);
+
+    el('pred-5d').textContent = prob5 + '%';
+    el('pred-10d').textContent = prob10 + '%';
+    el('pred-20d').textContent = prob20 + '%';
+    el('pred-5d-bar').style.width = prob5 + '%';
+    el('pred-10d-bar').style.width = prob10 + '%';
+    el('pred-20d-bar').style.width = prob20 + '%';
+
+    // Update KPI risk
+    el('kpi-risk').textContent = prob5 + '%';
+  }
+
+  if (history && history.length) {
+    const cols = Object.keys(history[0]);
+    el('pred-table').innerHTML = `
+      <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>${history.slice(-30).reverse().map(row => `
+        <tr>${cols.map(c => {
+          let v = row[c];
+          if (typeof v === 'number') v = fmt(v, 4);
+          else v = String(v);
+          return `<td>${v}</td>`;
+        }).join('')}</tr>
+      `).join('')}</tbody>
+    `;
+  }
+}
+
+async function loadVisualizations() {
+  const viz = await fetchJSON('/api/visualizations');
+  if (!viz || typeof viz !== 'object') {
+    el('viz-grid').innerHTML = '<div class="loading">No visualizations found</div>';
+    return;
+  }
+
+  el('viz-grid').innerHTML = Object.entries(viz).map(([key, url]) => `
+    <div class="card glass viz-card">
+      <div class="card-header">
+        <div class="card-title" style="font-size:13px;">${key.replace(/_/g, ' ')}</div>
+      </div>
+      <img src="${url}" alt="${key}" loading="lazy">
+    </div>
+  `).join('');
+}
+
+// Init
+(async () => {
+  await loadOverview();
+  await Promise.all([loadRegimes(), loadModels(), loadPredictions(), loadVisualizations()]);
+})();
+</script>
+</body>
+</html>
