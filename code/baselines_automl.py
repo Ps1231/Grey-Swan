@@ -316,8 +316,8 @@ def run_lstm(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
 
     model.eval()
     with torch.no_grad():
-        prob_val = model(Xva_t).numpy()
-        prob_test = model(Xte_t).numpy()
+        prob_val = np.concatenate([np.zeros(seq_len), model(Xva_t).numpy()])
+        prob_test = np.concatenate([np.zeros(seq_len), model(Xte_t).numpy()])
 
     return prob_val, prob_test, model
 
@@ -428,8 +428,8 @@ def run_tcn(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
 
     model.eval()
     with torch.no_grad():
-        prob_val = model(Xva_t).numpy()
-        prob_test = model(Xte_t).numpy()
+        prob_val = np.concatenate([np.zeros(seq_len), model(Xva_t).numpy()])
+        prob_test = np.concatenate([np.zeros(seq_len), model(Xte_t).numpy()])
 
     return prob_val, prob_test, model
 
@@ -544,8 +544,8 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
 
     model.eval()
     with torch.no_grad():
-        prob_val = model(Xva_t).numpy()
-        prob_test = model(Xte_t).numpy()
+        prob_val = np.concatenate([np.zeros(seq_len), model(Xva_t).numpy()])
+        prob_test = np.concatenate([np.zeros(seq_len), model(Xte_t).numpy()])
 
     return prob_val, prob_test, model
 
