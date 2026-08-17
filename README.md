@@ -72,15 +72,7 @@ Grey-Swan is a research-grade financial intelligence and risk-monitoring system 
 - **Foreign Exchange:** [EUR/USD (EURUSD=X)](https://finance.yahoo.com/quote/EURUSD%3DX/history/), [USD/JPY (JPY=X)](https://finance.yahoo.com/quote/JPY%3DX/history/)
 - **Equities:** [Apple (AAPL)](https://finance.yahoo.com/quote/AAPL/history/), [Microsoft (MSFT)](https://finance.yahoo.com/quote/MSFT/history/), [NVIDIA (NVDA)](https://finance.yahoo.com/quote/NVDA/history/)
 
-### 4.5 Nasdaq Data Link
-
-- Company fundamentals, earnings data, and alternative datasets for deeper fundamental coverage.
-
-### 4.6 SEC EDGAR
-
-- Corporate filings (10-K, 10-Q, 8-K), insider transactions, and event-driven signals.
-
-### 4.7 Indian Market Sources
+### 4.5 Indian Market Sources
 
 - NSE/BSE equity and index data for emerging-market regime coverage and cross-market contagion analysis.
 
@@ -267,7 +259,7 @@ The system identifies major factors contributing to each warning:
 
 ```
 Multi-Source Financial Data Ingestion
-    (FRED, CBOE, Yahoo Finance, Kenneth French, Nasdaq Data Link, SEC EDGAR, Indian Markets)
+    (FRED, CBOE, Yahoo Finance, Kenneth French, Indian Markets)
         |
         v
 Cleaning and Versioning Pipeline
