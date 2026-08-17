@@ -704,8 +704,9 @@ def plot_training_curves(train_losses, val_losses, config, save=True):
     # Per-component loss
     for key, style, label in [("regime", "g-", "Regime"), ("extreme", "m--", "Extreme"),
                                ("maxdd", "c-.", "MaxDD"), ("evt", "y:", "EVT")]:
-        axes[1].plot(epochs, [l[key] for l in train_losses], style, label=f"Train {label}", alpha=0.8)
-        axes[1].plot(epochs, [l[key] for l in val_losses], style, label=f"Val {label}", alpha=0.5)
+        if key in train_losses[0] and key in val_losses[0]:
+            axes[1].plot(epochs, [l[key] for l in train_losses], style, label=f"Train {label}", alpha=0.8)
+            axes[1].plot(epochs, [l[key] for l in val_losses], style, label=f"Val {label}", alpha=0.5)
     axes[1].set_xlabel("Epoch")
     axes[1].set_ylabel("Loss")
     axes[1].set_title(f"Grey-Swan Config {config}: Component Losses")
