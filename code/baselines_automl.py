@@ -554,8 +554,6 @@ def run_transformer(X_train, y_train, X_val, y_val, X_test, y_test, n_features):
                     best_val_loss = val_loss
                     best_state = {k: v.clone() for k, v in model.state_dict().items()}
             progress.update(task, advance=1, val_loss=val_loss)
-                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
-            progress.update(task, advance=1, val_loss=val_loss)
 
     if best_state:
         model.load_state_dict(best_state)

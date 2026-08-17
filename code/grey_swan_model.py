@@ -53,6 +53,7 @@ VIZ_DIR = OUT / "graph_snapshots"
 VIZ_DIR.mkdir(parents=True, exist_ok=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.set_num_threads(min(8, torch.get_num_threads()))
 N_NODES = 16
 HIDDEN_DIM = 64
 N_HEADS = 4
@@ -126,6 +127,9 @@ class GreySwanDataset(Dataset):
     - targets: dict of regime, extreme_5d/10d/20d, maxdd_5d/10d/20d
     """
 
+    # Class-level cache: load all graph snapshots once, shared across splits
+    _all_graphs: dict = None
+
     def __init__(self, features, regime_df, graph_idx, seq_len=20, split="train"):
         self.seq_len = seq_len
         self.graph_idx = graph_idx
@@ -144,30 +148,55 @@ class GreySwanDataset(Dataset):
         else:
             self.dates = common_dates[common_dates >= "2021-01-01"]
 
-        # Pre-compute graph features for all available dates
-        console.print(f"  Building {split} dataset ({len(self.dates):,} samples)...")
-
         self.tabular_cols = [c for c in features.columns if c not in regime_df.columns]
-        self._cache_graphs()
+
+        console.print(f"  Building {split} dataset ({len(self.dates):,} samples)...")
+        self._load_all_graphs_once()
+        self._build_date_map()
         self._cache_tabular()
 
-    def _cache_graphs(self):
-        """Pre-load all graph snapshots."""
-        self.graph_cache = {}
+    @classmethod
+    def _load_all_graphs_once(cls):
+        """Load all 1284 graph snapshots once, cached at class level."""
+        if cls._all_graphs is not None:
+            console.print(f"    Using cached {len(cls._all_graphs)} graph snapshots")
+            return
+
+        t0 = time.time()
+        cls._all_graphs = {}
         loaded = 0
+        for f in GRAPH_DIR.glob("graph_*.npz"):
+            try:
+                data = np.load(f, allow_pickle=True)
+                date_str = f.stem.replace("graph_", "")
+                date_key = pd.Timestamp(
+                    year=int(date_str[:4]), month=int(date_str[4:6]), day=int(date_str[6:8])
+                )
+                adj = build_adj_matrix(data["edges"], data["edge_weights"],
+                                       N_NODES, data["corr_matrix"])
+                node_feat = np.stack([data["node_returns"], data["node_vol"]], axis=-1)
+                cls._all_graphs[date_key] = (
+                    node_feat.astype(np.float32), adj, int(data["regime"].item())
+                )
+                loaded += 1
+            except Exception:
+                continue
+        elapsed = time.time() - t0
+        console.print(f"    Loaded {loaded} graph snapshots in {elapsed:.1f}s")
+
+    def _build_date_map(self):
+        """Map each dataset date to its nearest graph snapshot (backward fill)."""
+        graph_dates = sorted(GreySwanDataset._all_graphs.keys())
+        self.date_to_graph = {}
         missing = 0
         for date in self.dates:
-            date_str = date.strftime("%Y%m%d")
-            snap = load_graph_snapshot(date_str)
-            if snap is not None:
-                adj = build_adj_matrix(snap["edges"], snap["edge_weights"],
-                                       N_NODES, snap["corr_matrix"])
-                node_feat = np.stack([snap["node_returns"], snap["node_vol"]], axis=-1)
-                self.graph_cache[date] = (node_feat.astype(np.float32), adj)
-                loaded += 1
+            # Find nearest graph date <= this date
+            idx = np.searchsorted(graph_dates, date, side="right") - 1
+            if idx >= 0:
+                self.date_to_graph[date] = graph_dates[idx]
             else:
                 missing += 1
-        console.print(f"    Graph snapshots: {loaded} loaded, {missing} missing")
+        console.print(f"    Mapped {len(self.date_to_graph)} dates, {missing} without graph")
 
     def _cache_tabular(self):
         """Pre-compute tabular features."""
@@ -189,12 +218,13 @@ class GreySwanDataset(Dataset):
         seq_dates = self.dates[start:end]
         target_date = self.dates[end] if end < len(self.dates) else self.dates[-1]
 
-        # Graph sequence
+        # Graph sequence via nearest-snapshot mapping
         node_feats = []
         adj_mats = []
         for d in seq_dates:
-            if d in self.graph_cache:
-                nf, adj = self.graph_cache[d]
+            graph_date = self.date_to_graph.get(d)
+            if graph_date and graph_date in GreySwanDataset._all_graphs:
+                nf, adj, _ = GreySwanDataset._all_graphs[graph_date]
             else:
                 nf = np.zeros((N_NODES, 2), dtype=np.float32)
                 adj = np.zeros((N_NODES, N_NODES), dtype=np.float32)
@@ -821,7 +851,7 @@ def run_single_config(config, features, regime_df, graph_idx, epochs=30, lr=1e-3
 
     with Progress(
         SpinnerColumn(),
-        TextColumn(f"[bold cyan]Config {config}[/] {task.description}"),
+        TextColumn(f"[bold cyan]Config {config}[/] training"),
         BarColumn(bar_width=30),
         MofNCompleteColumn(),
         TextColumn("{task.fields[loss]:.4f}"),
