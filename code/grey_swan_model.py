@@ -613,6 +613,7 @@ def evaluate(model, loader, regime_weights):
                     "maxdd_5d": [], "maxdd_10d": [], "maxdd_20d": []}
     total_loss = 0
     n_batches = 0
+    loss_accum = {"regime": 0, "extreme": 0, "maxdd": 0, "evt": 0, "total": 0}
 
     for node_feats, adj, tabular, targets in loader:
         node_feats = node_feats.to(DEVICE)
@@ -621,10 +622,12 @@ def evaluate(model, loader, regime_weights):
         targets_dev = {k: v.to(DEVICE) for k, v in targets.items()}
 
         preds, evt_loss, _ = model(node_feats, adj, tabular)
-        loss, _ = compute_loss(preds, targets_dev, model, evt_loss, regime_weights)
+        loss, loss_dict = compute_loss(preds, targets_dev, model, evt_loss, regime_weights)
 
         total_loss += loss.item()
         n_batches += 1
+        for k in loss_accum:
+            loss_accum[k] += loss_dict[k]
 
         all_preds["regime"].append(preds["regime"].cpu().numpy())
         all_preds["extreme"].append(preds["extreme"].cpu().numpy())
@@ -637,7 +640,8 @@ def evaluate(model, loader, regime_weights):
     all_preds = {k: np.concatenate(v) for k, v in all_preds.items()}
     all_targets = {k: np.concatenate(v) for k, v in all_targets.items()}
 
-    return total_loss / max(n_batches, 1), all_preds, all_targets
+    loss_dict_avg = {k: v / max(n_batches, 1) for k, v in loss_accum.items()}
+    return total_loss / max(n_batches, 1), all_preds, all_targets, loss_dict_avg
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -872,8 +876,8 @@ def run_single_config(config, features, regime_df, graph_idx, epochs=30, lr=1e-3
             train_losses.append(tr_dict)
 
             # Validate
-            val_loss, val_preds, val_targets = evaluate(model, val_dl, regime_weights)
-            val_losses.append({"total": val_loss, **{k: v for k, v in compute_metrics(val_preds, val_targets).items() if "mae" in k or "acc" in k}})
+            val_loss, val_preds, val_targets, val_loss_dict = evaluate(model, val_dl, regime_weights)
+            val_losses.append({**val_loss_dict, **{k: v for k, v in compute_metrics(val_preds, val_targets).items() if "mae" in k or "acc" in k}})
 
             scheduler.step()
             current_lr = scheduler.get_last_lr()[0]
@@ -892,9 +896,9 @@ def run_single_config(config, features, regime_df, graph_idx, epochs=30, lr=1e-3
         model.load_state_dict(best_state)
 
     # Final evaluation
-    _, train_preds, train_targets = evaluate(model, train_dl, regime_weights)
-    _, val_preds, val_targets = evaluate(model, val_dl, regime_weights)
-    _, test_preds, test_targets = evaluate(model, test_dl, regime_weights)
+    _, train_preds, train_targets, _ = evaluate(model, train_dl, regime_weights)
+    _, val_preds, val_targets, _ = evaluate(model, val_dl, regime_weights)
+    _, test_preds, test_targets, _ = evaluate(model, test_dl, regime_weights)
 
     train_metrics = compute_metrics(train_preds, train_targets)
     val_metrics = compute_metrics(val_preds, val_targets)
