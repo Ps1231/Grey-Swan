@@ -100,6 +100,21 @@ Grey-Swan is a research-grade financial intelligence and risk-monitoring system 
 
 All downloaded data files are stored in `data-headers/` for reference.
 
+
+### 4.11 SEC EDGAR Datasets
+
+- [Financial Statement and Notes Data Sets](https://www.sec.gov/data-research/sec-markets-data/financial-statement-notes-data-sets)
+- [Form 8-k ](https://www.sec.gov/Archives/edgar/data/1050446/000119312526237907/mstr-20260526.htm)
+- [Form 8-K Event Filings](https://sec-api.io/sandbox/latest-form-8-k-filings)
+
+### 4.12 FRED Financial Market Indicators
+
+- [TED Spread](https://fred.stlouisfed.org/series/STLFSI3)
+- [St. Louis Fed Financial Stress Index](https://fred.stlouisfed.org/series/STLFSI3)
+- [ICE BofA Option-Adjusted Spreads](https://fred.stlouisfed.org/series/BAMLH0A0HYM2)
+- [3-Month Treasury Bill Secondary Market Rate (DTB3)](https://fred.stlouisfed.org/series/DTB3)
+  
+
 **Yahoo Finance (11 tickers)** -- `Date, Open, High, Low, Close, Volume, Dividends, Stock Splits`
 
 | File | Ticker |
