@@ -60,26 +60,16 @@ def load_french(name: str) -> pd.DataFrame:
     path = RAW / "french" / f"{name}.csv"
     lines = path.read_text(encoding="utf-8").splitlines()
 
-    # Find the header line (contains the factor names, starts with date-like pattern or comma)
+    # Find the header line: look for line containing known factor names
     header_idx = None
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
             continue
-        # Header line: after preamble, first non-empty line with factor keywords
-        if header_idx is None:
-            # Skip lines that look like preamble text
-            if any(kw in stripped for kw in ["Copyright", "Fama", "French", "Developed",
-                                               "Research", "Data", "http", "https",
-                                               "This data", "See above", "the data",
-                                               "Monthly factors", "Daily factors",
-                                               "5 factors", "3 factors", "momentum"]):
-                continue
-            # Check if this looks like a CSV header
-            parts = stripped.split(",")
-            if len(parts) >= 2:
-                header_idx = i
-                break
+        # Header line contains known factor keywords
+        if any(kw in stripped for kw in ["Mkt-RF", "SMB", "HML", "RMW", "CMA", "Mom", "RF"]):
+            header_idx = i
+            break
 
     if header_idx is None:
         raise ValueError(f"Cannot find header in {name}")
@@ -126,25 +116,37 @@ def load_fred_yields() -> pd.DataFrame:
         df = df[["Close"]].copy()
         df.columns = [f"fred_{ticker}_yield"]
         frames.append(df)
-    return pd.concat(frames, axis=1)
+    return pd.concat(frames, axis=1, sort=True)
 
 
 def load_treasury_yield_curve() -> pd.DataFrame:
     """Load Treasury yield curve CSV (reverse-chronological, variable columns)."""
     path = RAW / "treasury" / "treasury_yield_curve_full.csv"
-    df = pd.read_csv(path)
 
-    # First column is the date
-    date_col = df.columns[0]
-    df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y")
-    df = df.rename(columns={date_col: "Date"})
+    # Read with python engine to handle variable column counts
+    import io
+    rows = []
+    with open(path) as f:
+        header = f.readline()  # skip header
+        for line in f:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            parts = stripped.split(",")
+            # First col is always the date, take only the 10 yield cols
+            # (some rows have extra cols for newer tenors)
+            date_str = parts[0]
+            yields = parts[1:11]  # Take first 10 yield columns
+            if len(yields) < 10:
+                yields += [np.nan] * (10 - len(yields))
+            rows.append([date_str] + yields)
+
+    col_names = ["Date", "3 Mo", "6 Mo", "1 Yr", "2 Yr", "3 Yr",
+                 "5 Yr", "7 Yr", "10 Yr", "20 Yr", "30 Yr"]
+    df = pd.DataFrame(rows, columns=col_names)
+    df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+    df = df.dropna(subset=["Date"])
     df = df.set_index("Date").sort_index()
-
-    # Standardize column names — keep only common tenors
-    wanted = ["3 Mo", "6 Mo", "1 Yr", "2 Yr", "3 Yr", "5 Yr",
-              "7 Yr", "10 Yr", "20 Yr", "30 Yr"]
-    available = [c for c in wanted if c in df.columns]
-    df = df[available]
 
     # Clean column names
     df.columns = [f"treasury_{c.replace(' ', '_').replace('.', '').lower()}" for c in df.columns]
@@ -162,6 +164,9 @@ def load_bls(series_name: str) -> pd.DataFrame:
     raw = json.loads(path.read_text(encoding="utf-8"))
 
     records = raw.get("data", [])
+    if not records:
+        raise ValueError(f"empty data array in {path.name}")
+
     rows = []
     for r in records:
         year = int(r["year"])
@@ -169,8 +174,14 @@ def load_bls(series_name: str) -> pd.DataFrame:
         if period.startswith("M"):
             month = int(period[1:])
             date = pd.Timestamp(year=year, month=month, day=1)
-            value = float(r["value"])
+            val_str = r["value"]
+            if val_str == "-" or val_str == "":
+                continue
+            value = float(val_str)
             rows.append({"Date": date, f"bls_{series_name}": value})
+
+    if not rows:
+        raise ValueError(f"no valid rows after parsing {path.name}")
 
     df = pd.DataFrame(rows).set_index("Date").sort_index()
     df = df[~df.index.duplicated(keep="first")]
@@ -415,9 +426,9 @@ def run_pipeline(skip_viz: bool = False):
         "yahoo_eurusd":    lambda: load_yahoo("eurusd"),
         "yahoo_usdjpy":    lambda: load_yahoo("usdjpy"),
         "fred_yields":     load_fred_yields,
-        "french_3factor":  lambda: load_french("3factor"),
-        "french_5factor":  lambda: load_french("5factor"),
-        "french_momentum": lambda: load_french("momentum"),
+        "french_3factor":  lambda: load_french("french_3factor"),
+        "french_5factor":  lambda: load_french("french_5factor"),
+        "french_momentum": lambda: load_french("french_momentum"),
         "treasury_yields": load_treasury_yield_curve,
         "bls_cpi":         lambda: load_bls("cpi_all_items"),
         "bls_unemployment":lambda: load_bls("unemployment_rate"),
