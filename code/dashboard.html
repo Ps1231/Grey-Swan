@@ -814,7 +814,7 @@ async function loadRegimes() {
 
   if (timeline && timeline.dates) {
     el('regime-timeline').innerHTML = timeline.regimes.map((r, i) =>
-      `<div class="mini-bar" data-r="${r}" title="${timeline.dates[i]}: ${REGIME_NAMES[r]}"></div>`
+      `<div class="mini-bar" data-r="${r}" style="height:${Math.max(10, (r + 1) / 5 * 100)}%" title="${timeline.dates[i]}: ${REGIME_NAMES[r]}"></div>`
     ).join('');
   }
 
